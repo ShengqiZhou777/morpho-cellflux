@@ -26,12 +26,12 @@ train-scaffold:
 train-puncta-ddp:
 	source /home/ubuntu/miniconda3/etc/profile.d/conda.sh && \
 	conda activate pmf && \
-	torchrun --standalone --nproc_per_node=2 scripts/train_cellflux.py --config configs/train_cellflux_scaffold_mean_puncta.yaml --max-steps 2000 --batch-size 128 --output-dir outputs/cellflux_scaffold_mean_puncta_residual_ddp_2k
+	torchrun --standalone --nproc_per_node=2 scripts/train_cellflux.py --config configs/train_cellflux_scaffold_mean_puncta.yaml --max-steps 2000 --batch-size 160 --output-dir outputs/cellflux_scaffold_mean_puncta_residual_ddp_bs160_2k
 
 train-lipid-panel-ddp:
 	source /home/ubuntu/miniconda3/etc/profile.d/conda.sh && \
 	conda activate pmf && \
-	torchrun --standalone --nproc_per_node=2 scripts/train_cellflux.py --config configs/train_cellflux_lipid_panel.yaml --max-steps 2000 --batch-size 128 --output-dir outputs/cellflux_lipid_panel_scaffold_ddp_2k
+	torchrun --standalone --nproc_per_node=2 scripts/train_cellflux.py --config configs/train_cellflux_lipid_panel.yaml --max-steps 2000 --batch-size 160 --output-dir outputs/cellflux_lipid_panel_scaffold_ddp_bs160_2k
 
 ddp-sanity:
 	source /home/ubuntu/miniconda3/etc/profile.d/conda.sh && \

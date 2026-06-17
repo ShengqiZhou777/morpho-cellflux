@@ -54,6 +54,15 @@ def parse_args() -> argparse.Namespace:
         help="Comma-separated channels for focused morphology metrics.",
     )
     parser.add_argument(
+        "--channel-names",
+        default=None,
+        help=(
+            "Optional comma-separated names for --channels. Use this for "
+            "panel previews whose channel indices are not the original "
+            "18-channel indices."
+        ),
+    )
+    parser.add_argument(
         "--top-fraction",
         type=float,
         default=0.03,
@@ -137,6 +146,7 @@ def channel_stats(
     target: np.ndarray,
     mask: np.ndarray,
     channels: list[int],
+    channel_names: dict[int, str],
     top_fraction: float,
 ) -> list[dict[str, Any]]:
     source_dog = dog(source)
@@ -163,7 +173,7 @@ def channel_stats(
         rows.append(
             {
                 "channel": channel,
-                "name": CHANNEL_NAMES[channel],
+                "name": channel_names[channel],
                 "mean_ratio_gen_target": gen_mean / (tgt_mean + EPS),
                 "std_ratio_gen_target": gen_std / (tgt_std + EPS),
                 "dog_energy_ratio_gen_target": gen_dog_energy / (tgt_dog_energy + EPS),
@@ -183,7 +193,12 @@ def channel_stats(
     return rows
 
 
-def summarize_preview(path: Path, channels: list[int], top_fraction: float) -> dict[str, Any]:
+def summarize_preview(
+    path: Path,
+    channels: list[int],
+    channel_names: dict[int, str],
+    top_fraction: float,
+) -> dict[str, Any]:
     data = np.load(path)
     source = data["source"].astype(np.float32)
     generated = data["generated"].astype(np.float32)
@@ -201,7 +216,15 @@ def summarize_preview(path: Path, channels: list[int], top_fraction: float) -> d
         gen_target_mse = masked_mse(gen, tgt, mask)
         gen_source_mse = masked_mse(gen, src, mask)
         source_target_mse = masked_mse(src, tgt, mask)
-        sample_rows = channel_stats(src, gen, tgt, mask, channels, top_fraction)
+        sample_rows = channel_stats(
+            src,
+            gen,
+            tgt,
+            mask,
+            channels,
+            channel_names=channel_names,
+            top_fraction=top_fraction,
+        )
         focus_rows.extend(sample_rows)
         sample_summaries.append(
             {
@@ -238,7 +261,7 @@ def summarize_preview(path: Path, channels: list[int], top_fraction: float) -> d
         channel_aggregates.append(
             {
                 "channel": channel,
-                "name": CHANNEL_NAMES[channel],
+                "name": channel_names[channel],
                 "std_ratio_gen_target": safe_mean(
                     np.asarray([row["std_ratio_gen_target"] for row in rows])
                 ),
@@ -329,8 +352,15 @@ def markdown_report(results: list[dict[str, Any]]) -> str:
 def main() -> None:
     args = parse_args()
     channels = [int(item.strip()) for item in args.channels.split(",") if item.strip()]
+    if args.channel_names:
+        names = [item.strip() for item in args.channel_names.split(",") if item.strip()]
+        if len(names) != len(channels):
+            raise ValueError("--channel-names must have the same length as --channels")
+        channel_names = dict(zip(channels, names))
+    else:
+        channel_names = {channel: CHANNEL_NAMES[channel] for channel in channels}
     results = [
-        summarize_preview(Path(path), channels, float(args.top_fraction))
+        summarize_preview(Path(path), channels, channel_names, float(args.top_fraction))
         for path in args.preview_npz
     ]
 

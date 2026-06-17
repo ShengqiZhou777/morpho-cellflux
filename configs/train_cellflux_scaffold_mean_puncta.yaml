@@ -44,7 +44,7 @@ loss:
 training:
   seed: 17
   device: auto
-  batch_size: 128
+  batch_size: 160
   max_steps: 2000
   learning_rate: 0.0001
   weight_decay: 0.000001
@@ -58,7 +58,7 @@ training:
   save_every: 1000
   val_batches: 64
   preview_every: 1000
-  output_dir: outputs/cellflux_scaffold_mean_puncta_residual_ddp_2k
+  output_dir: outputs/cellflux_scaffold_mean_puncta_residual_ddp_bs160_2k
 
 sampling:
   steps: 16

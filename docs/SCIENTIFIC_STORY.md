@@ -572,3 +572,64 @@ deterministic/pixelwise generation mechanism. If this improves, the paper can
 lead with a focused lipid-function story and treat 18-channel generation as an
 extension.
 ```
+
+Result:
+
+```text
+Completed 2026-06-17
+global batch size 128, DDP world size 2, per-GPU batch size 64
+final step: 2000
+best val_loss: 0.0114848018 at step 2000
+previews:
+  outputs/cellflux_lipid_panel_scaffold_ddp_2k/jpg_previews_step0001000
+  outputs/cellflux_lipid_panel_scaffold_ddp_2k/jpg_previews_step0002000
+diagnostics:
+  outputs/cellflux_lipid_panel_scaffold_ddp_2k/lipid_panel_diagnostics.md
+```
+
+Visual readout:
+
+```text
+Restricting to Perilipin/Alb/polyT did not solve the core failure. Generated
+cells follow the target scaffold, but the interior remains a smooth
+low-frequency mixture instead of target-like local Perilipin puncta and
+heterogeneous Alb/polyT structure.
+```
+
+Metric readout:
+
+```text
+step 1000:
+  gen-target MSE 0.03080, gen-source MSE 0.04266, target progress 0.466
+  Perilipin top-mass ratio generated/target 0.562
+step 2000:
+  gen-target MSE 0.04628, gen-source MSE 0.04361, target progress 0.225
+  Perilipin top-mass ratio generated/target 0.592
+```
+
+Decision:
+
+```text
+The 18-channel objective may still dilute some phenotypes, but it is not the
+main blocker. Even a 3-channel lipid/function panel keeps the deterministic
+scaffolded flow in a smooth-average regime. The next model change should add a
+distributional or stochastic texture mechanism rather than more pixelwise
+high-frequency penalties.
+```
+
+## Hardware Target For Next Runs
+
+The completed lipid-panel run used global batch size 128 and was observed around
+25 GB/GPU. Future formal DDP experiments should target roughly 30 GB/GPU by
+using global batch size 160, i.e. per-GPU batch size 80 on two GPUs. This is an
+efficiency target only; it should improve throughput, but it is not expected to
+fix the smooth-interior phenotype by itself.
+
+Updated defaults:
+
+```text
+configs/train_cellflux_lipid_panel.yaml
+configs/train_cellflux_scaffold_mean_puncta.yaml
+Makefile train-lipid-panel-ddp
+Makefile train-puncta-ddp
+```
