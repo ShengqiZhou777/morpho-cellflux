@@ -633,3 +633,48 @@ configs/train_cellflux_scaffold_mean_puncta.yaml
 Makefile train-lipid-panel-ddp
 Makefile train-puncta-ddp
 ```
+
+## Faithful CellFlux Baseline
+
+Purpose:
+
+```text
+Before adding a stochastic texture module, test a baseline that is closer to
+CellFlux's reported formulation: distribution-wise source-control to
+perturbation flow matching without target scaffold conditioning.
+```
+
+Configuration:
+
+```text
+configs/train_cellflux_lipid_panel_faithful.yaml
+```
+
+Key differences from the scaffolded lipid-panel run:
+
+```text
+target_scaffold: false
+start_mode: source
+hidden_channels: 128
+high_frequency_residual: false
+source_noise_prob: 0.5
+condition_drop_prob: 0.2
+guidance_scale: 1.2
+global batch size: 156
+```
+
+Run target:
+
+```text
+outputs/cellflux_lipid_panel_faithful_ddp_bs156_6k
+```
+
+Decision rule:
+
+```text
+If the faithful baseline shows clear distributional movement toward target-like
+Perilipin/Alb/polyT structure, continue it toward 50-100 epochs and evaluate
+with distribution-level metrics. If it still produces smooth interiors after
+the 20-epoch diagnostic, move to a distributional/stochastic texture module
+instead of adding more pixelwise losses.
+```

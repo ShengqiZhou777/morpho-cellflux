@@ -1,7 +1,7 @@
 .SHELLFLAGS := -lc
 SHELL := /bin/bash
 
-.PHONY: data train train-long train-scaffold train-puncta-ddp train-lipid-panel-ddp ddp-sanity smoke-train export-preview
+.PHONY: data train train-long train-scaffold train-puncta-ddp train-lipid-panel-ddp train-lipid-panel-faithful-ddp ddp-sanity smoke-train export-preview
 
 data:
 	source /home/ubuntu/miniconda3/etc/profile.d/conda.sh && \
@@ -32,6 +32,11 @@ train-lipid-panel-ddp:
 	source /home/ubuntu/miniconda3/etc/profile.d/conda.sh && \
 	conda activate pmf && \
 	torchrun --standalone --nproc_per_node=2 scripts/train_cellflux.py --config configs/train_cellflux_lipid_panel.yaml --max-steps 2000 --batch-size 160 --output-dir outputs/cellflux_lipid_panel_scaffold_ddp_bs160_2k
+
+train-lipid-panel-faithful-ddp:
+	source /home/ubuntu/miniconda3/etc/profile.d/conda.sh && \
+	conda activate pmf && \
+	PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True torchrun --standalone --nproc_per_node=2 scripts/train_cellflux.py --config configs/train_cellflux_lipid_panel_faithful.yaml --max-steps 6000 --batch-size 156 --output-dir outputs/cellflux_lipid_panel_faithful_ddp_bs156_6k
 
 ddp-sanity:
 	source /home/ubuntu/miniconda3/etc/profile.d/conda.sh && \
