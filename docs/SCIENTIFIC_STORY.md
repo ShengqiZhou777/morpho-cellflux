@@ -678,3 +678,52 @@ with distribution-level metrics. If it still produces smooth interiors after
 the 20-epoch diagnostic, move to a distributional/stochastic texture module
 instead of adding more pixelwise losses.
 ```
+
+## CellFlux-Adapted A2 Baseline
+
+Rationale:
+
+```text
+The CellFlux reference code uses source/control initialization with optional
+Gaussian noise and a pure velocity MSE objective. Its reported noise level is
+tied to its own preprocessing scale, so the value should not be copied directly.
+For this project, the lipid-panel arrays are already in [0, 1] with average
+channel std around 0.15. A source noise scale of 0.10 is a scale-adapted
+diagnostic value: large enough to matter, but below the image dynamic range.
+```
+
+Configuration:
+
+```text
+configs/train_cellflux_lipid_panel_adapted.yaml
+```
+
+Key settings:
+
+```text
+target_scaffold: false
+start_mode: source
+hidden_channels: 128
+high_frequency_residual: false
+source_noise_prob: 0.5
+source_noise_scale: 0.10
+condition_drop_prob: 0.2
+loss: pure velocity MSE
+guidance_scale: 1.2
+global batch size: 156
+```
+
+Run target:
+
+```text
+outputs/cellflux_lipid_panel_adapted_ddp_bs156_noise010_6k
+```
+
+Decision rule:
+
+```text
+Use step 3000 as the first visual/distributional checkpoint and step 6000 as
+the A2 decision point. If the generated Perilipin/Alb/polyT distribution still
+looks smooth or source-like, move to the distributional/stochastic texture
+module instead of tuning more pixelwise losses.
+```
