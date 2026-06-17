@@ -17,6 +17,7 @@ class CellFluxPairDataset(Dataset):
         pairs_path: str | Path,
         project_root: str | Path | None = None,
         image_key: str = "x",
+        channel_indices: list[int] | tuple[int, ...] | None = None,
         return_onehot: bool = False,
         num_conditions: int | None = None,
     ):
@@ -27,6 +28,11 @@ class CellFluxPairDataset(Dataset):
             else self.pairs_path.resolve().parents[3]
         )
         self.image_key = image_key
+        self.channel_indices = (
+            tuple(int(channel) for channel in channel_indices)
+            if channel_indices is not None
+            else None
+        )
         self.return_onehot = return_onehot
         self.num_conditions = num_conditions
         self.pairs = pd.read_parquet(self.pairs_path)
@@ -41,6 +47,8 @@ class CellFluxPairDataset(Dataset):
     def _load_image(self, relpath: str) -> torch.Tensor:
         path = self.project_root / relpath
         arr = np.load(path)[self.image_key].astype(np.float32, copy=False)
+        if self.channel_indices is not None:
+            arr = arr[list(self.channel_indices)]
         return torch.from_numpy(arr)
 
     def _condition(self, condition_id: int) -> torch.Tensor:

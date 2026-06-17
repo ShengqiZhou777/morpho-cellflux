@@ -4,6 +4,8 @@ __pycache__/
 .venv/
 venv/
 .env
+.omc/
+uv.lock
 
 .pytest_cache/
 .mypy_cache/
@@ -14,6 +16,10 @@ dist/
 *.egg-info/
 
 logs/
+outputs/cellflux_*/
+outputs/diagnostics/
+outputs/cpu_smoke/
+outputs/ddp_sanity*/
 outputs/checkpoints/
 outputs/images/
 outputs/metrics/
