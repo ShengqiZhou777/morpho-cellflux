@@ -1,0 +1,17 @@
+[project]
+name = "morpho-cellflux"
+version = "0.1.0"
+description = "CellFlux-style data factory and training scaffold for Perturb-Multimodal CRISPR hepatocyte images."
+requires-python = ">=3.10"
+dependencies = [
+  "anndata",
+  "numpy",
+  "pandas",
+  "pyarrow",
+  "pyyaml",
+  "torch",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
