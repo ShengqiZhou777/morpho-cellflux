@@ -20,7 +20,7 @@ raw assets (morpho-phenotyping)               external h5ad (RNA/protein) + mani
             morphoflux.engine  (absorbed CellFlux flow-matching engine)
             torchrun -m morphoflux.engine.train  (scripts/launch_cellflux_pm.sh)
             - conditional flow matching, control->perturbed, CFG, EMA, ODE sampling, FID
-            - reads configs/cellflux/<name>.yaml  (CELLFLUX_CONFIG_DIR)
+            - reads configs/<name>.yaml  (MORPHOFLUX_CONFIG_DIR)
             - writes outputs/<run>/: checkpoints, fid_samples/epoch-<e>/, log.txt
                                  |
                                  v
@@ -40,7 +40,7 @@ raw assets (morpho-phenotyping)               external h5ad (RNA/protein) + mani
   added a dataset/condition adapter (`perturbmulti_id` arch, `_load_perturbmulti`, the
   split branch, per-epoch trt2ctrl, a torch-2.11 load fix); the generative core is upstream.
 - `scripts/` — CLI tools: data build, training/interpolation launchers, evaluation/figures.
-- `configs/cellflux/` — engine run configs (single source of truth).
+- `configs/` — engine run configs (single source of truth).
 - `data/` (gitignored), `outputs/` (gitignored), `docs/`.
 
 ## Modality semantics (pinned — do not muddle)
@@ -55,7 +55,7 @@ raw assets (morpho-phenotyping)               external h5ad (RNA/protein) + mani
 ```bash
 pip install -e .            # registers morphoflux + engine (deps in pyproject)
 
-# train (2-GPU DDP), config resolved from configs/cellflux/
+# train (2-GPU DDP), config resolved from configs/
 OUT=outputs/<run> CONFIG=perturbmulti_stronghits_id DATASET=perturbmulti_id \
   bash scripts/launch_cellflux_pm.sh
 

@@ -26,8 +26,9 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-RUN = "/home/ubuntu/data/sqzhou/projects/morpho-cellflux/outputs/cellflux_pm_lipid_ddp_v2"
-IMG = "/home/ubuntu/data/sqzhou/projects/morpho-cellflux/data/raw/extracted_images"
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+RUN = os.path.join(REPO_ROOT, "outputs/cellflux_pm_lipid_ddp_v2")
+IMG = os.path.join(REPO_ROOT, "data/raw/extracted_images")
 PERI = 5  # Perilipin channel index in the 18-ch npz
 EPOCH_DIR = sorted(glob.glob(f"{RUN}/fid_samples/epoch-*"),
                    key=lambda p: int(p.split("-")[-1]))[-1]

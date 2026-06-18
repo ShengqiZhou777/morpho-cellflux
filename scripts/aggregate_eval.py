@@ -26,7 +26,8 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from scipy.stats import pearsonr, spearmanr
 
-IMG = "/home/ubuntu/data/sqzhou/projects/morpho-cellflux/data/raw/extracted_images"
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+IMG = os.path.join(REPO_ROOT, "data/raw/extracted_images")
 CHANNELS = [("Perilipin", 0), ("Calreticulin", 1), ("pS6RP", 2)]  # RGB order == npz[[5,9,10]]
 NPZ_CH = [5, 9, 10]
 LEAD = {"Perilipin": ["Insig1", "Pten", "Eif2s1", "Aars"],       # lipid/steatosis

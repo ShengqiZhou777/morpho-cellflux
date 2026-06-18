@@ -22,9 +22,9 @@ condition_embedding_dimension: null
 modality_list:
   - Gene
 
-image_path: /home/ubuntu/data/sqzhou/projects/morpho-cellflux/data/raw/extracted_images
-data_index_path: /home/ubuntu/data/sqzhou/projects/morpho-cellflux/data/processed/cellflux_ext/index_interp_leadgenes.csv
-embedding_path: /home/ubuntu/data/sqzhou/projects/morpho-cellflux/data/processed/cellflux_ext/embedding_gene_identity.csv
+image_path: data/raw/extracted_images
+data_index_path: data/processed/cellflux_ext/index_interp_leadgenes.csv
+embedding_path: data/processed/cellflux_ext/embedding_gene_identity.csv
 
 augment_train: False
 normalize: False

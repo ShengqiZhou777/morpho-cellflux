@@ -23,7 +23,8 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-IMG = "/home/ubuntu/data/sqzhou/projects/morpho-cellflux/data/raw/extracted_images"
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+IMG = os.path.join(REPO_ROOT, "data/raw/extracted_images")
 NPZ_CH = [5, 9, 10]  # panel2: Perilipin(R), Calreticulin(G), pS6RP(B)
 
 

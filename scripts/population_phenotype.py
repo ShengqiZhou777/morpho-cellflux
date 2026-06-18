@@ -25,7 +25,8 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from scipy.stats import mannwhitneyu
 
-IMG = "/home/ubuntu/data/sqzhou/projects/morpho-cellflux/data/raw/extracted_images"
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+IMG = os.path.join(REPO_ROOT, "data/raw/extracted_images")
 # phenotype -> (RGB index, npz channel, reducer name)
 PHENO = {"lipid": (0, 5, "puncta"), "upr": (1, 9, "mean"), "mtor": (2, 10, "mean")}
 LABEL = {"lipid": "Perilipin puncta (top-2% mean)",

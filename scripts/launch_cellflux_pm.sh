@@ -1,31 +1,30 @@
 #!/usr/bin/env bash
-# Launch the perturbmulti (Perturb-Multi hepatocyte lipid panel) CellFlux training on N GPUs.
-# Persists per-step stdout to $OUT/train_stdout.log -- the harness /tmp task log is ephemeral.
+# Launch perturbmulti (Perturb-Multi hepatocyte) training on N GPUs.
+# Per-step stdout is persisted to $OUT/train_stdout.log.
 #
 # Override defaults via env vars, e.g.:
-#   OUT=.../outputs/cellflux_pm_lipid_ddp_v2 BATCH=16 ACCUM=2 EPOCHS=60 bash scripts/launch_cellflux_pm.sh
+#   OUT=outputs/my_run BATCH=16 ACCUM=2 EPOCHS=60 bash scripts/launch_cellflux_pm.sh
 set -euo pipefail
 
-PROJECT_DIR=/home/ubuntu/data/sqzhou/projects/morpho-cellflux
-TORCHRUN=/home/ubuntu/miniconda3/envs/pmf/bin/torchrun
+PROJECT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+TORCHRUN=${TORCHRUN:-$(command -v torchrun || echo /home/ubuntu/miniconda3/envs/pmf/bin/torchrun)}
 
-OUT=${OUT:-/home/ubuntu/data/sqzhou/projects/morpho-cellflux/outputs/cellflux_pm_lipid_ddp_v1}
-BATCH=${BATCH:-16}          # per-GPU batch size (16 -> ~25GB, safe through FID eval on 32GB)
-ACCUM=${ACCUM:-1}           # grad accumulation: effective batch = BATCH * ACCUM * NPROC (no extra memory)
+OUT=${OUT:-$PROJECT_DIR/outputs/perturbmulti_run}
+BATCH=${BATCH:-16}          # per-GPU batch size. 16 uses about 25GB and is safe through FID eval on a 32GB card.
+ACCUM=${ACCUM:-1}           # gradient accumulation. Effective batch = BATCH * ACCUM * NPROC, no extra memory.
 EPOCHS=${EPOCHS:-40}
 EVAL_FREQ=${EVAL_FREQ:-10}
 FID_SAMPLES=${FID_SAMPLES:-1024}
 NPROC=${NPROC:-2}
-USE_INITIAL=${USE_INITIAL:-1}   # 0=noise->target (generative, cannot copy source), 1=control init, 2=control+noise
-NOISE_LEVEL=${NOISE_LEVEL:-0.2} # noise added to control when USE_INITIAL=2
-CFG=${CFG:-0.2}                 # classifier-free guidance scale at sampling
-CONFIG=${CONFIG:-perturbmulti_stronghits_id}  # CellFlux config (configs/<CONFIG>.yaml) -> data index + embedding
-DATASET=${DATASET:-perturbmulti_id}  # model arch: perturbmulti_id (condition_dim 204 = gene identity one-hot)
+USE_INITIAL=${USE_INITIAL:-1}   # 0 = noise to target, 1 = control init, 2 = control plus noise.
+NOISE_LEVEL=${NOISE_LEVEL:-0.2} # noise added to the control image when USE_INITIAL=2.
+CFG=${CFG:-0.2}                 # classifier-free guidance scale at sampling.
+CONFIG=${CONFIG:-perturbmulti_stronghits_id}  # config name under configs/, selects the data index and embedding.
+DATASET=${DATASET:-perturbmulti_id}           # model arch. perturbmulti_id has condition_dim 204 (gene-identity one-hot).
 
 mkdir -p "$OUT"
 cd "$PROJECT_DIR"
 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \
-CELLFLUX_CONFIG_DIR="$PROJECT_DIR/configs/cellflux" \
 "$TORCHRUN" --standalone --nproc_per_node="$NPROC" -m morphoflux.engine.train \
   --dataset "$DATASET" --config "$CONFIG" --device cuda \
   --batch_size "$BATCH" --accum_iter "$ACCUM" --num_workers 10 --epochs "$EPOCHS" \

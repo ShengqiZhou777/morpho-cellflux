@@ -26,7 +26,7 @@ import numpy as np
 import pandas as pd
 import scipy.sparse as sp
 
-ROOT = "/home/ubuntu/data/sqzhou/projects/morpho-cellflux"
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT = os.path.join(ROOT, "data/processed/cellflux_ext")
 MANIFEST = os.path.join(ROOT, "data/processed/cellflux_manifest.parquet")
 VOCAB = os.path.join(ROOT, "data/processed/condition_vocab.json")

@@ -211,16 +211,17 @@ def main(args):
 
 
 def load_yaml_config(yaml_path):
-    # cwd-independent: accept an absolute/relative .yaml path as-is, otherwise resolve a
-    # bare config NAME against CELLFLUX_CONFIG_DIR (default: repo configs/cellflux/).
+    # A path ending in .yaml or an absolute path is used as given.
+    # A bare config name is resolved inside the config directory, which defaults
+    # to the repository's configs/ and can be overridden with the
+    # MORPHOFLUX_CONFIG_DIR environment variable.
     if yaml_path.endswith(".yaml") or os.path.isabs(yaml_path):
         path = yaml_path
     else:
-        base = os.environ.get(
-            "CELLFLUX_CONFIG_DIR",
-            os.path.join(os.path.dirname(__file__), "..", "..", "..", "configs", "cellflux"),
-        )
-        path = os.path.join(base, yaml_path + ".yaml")
+        repo_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+        default_config_dir = os.path.join(repo_root, "configs")
+        config_dir = os.environ.get("MORPHOFLUX_CONFIG_DIR", default_config_dir)
+        path = os.path.join(config_dir, yaml_path + ".yaml")
     with open(path, "r") as file:
         yaml_data = yaml.safe_load(file)
     return yaml_data
