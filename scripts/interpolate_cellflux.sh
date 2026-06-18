@@ -31,6 +31,7 @@ set -euo pipefail
 
 CELLFLUX_DIR=/home/ubuntu/data/sqzhou/projects/CellFlux
 TORCHRUN=/home/ubuntu/miniconda3/envs/pmf/bin/torchrun
+PROJECT_DIR=/home/ubuntu/data/sqzhou/projects/morpho-cellflux
 
 CKPT=${CKPT:?set CKPT=<path to a checkpoint-*.pth>}
 OUT=${OUT:?set OUT=<output dir; interpolation/ is written under it>}
@@ -46,6 +47,9 @@ EPOCHS=${EPOCHS:-1000000}         # huge: range(start_epoch, EPOCHS) must be non
                                   # start_epoch=ckpt_epoch+1; eval_only breaks after one iteration.
 
 mkdir -p "$OUT"
+if [[ -f "$PROJECT_DIR/configs/cellflux_external/${CONFIG}.yaml" ]]; then
+  cp "$PROJECT_DIR/configs/cellflux_external/${CONFIG}.yaml" "$CELLFLUX_DIR/configs/${CONFIG}.yaml"
+fi
 cd "$CELLFLUX_DIR"
 CUDA_VISIBLE_DEVICES="$GPU" PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \
 "$TORCHRUN" --standalone --nproc_per_node=1 train.py \

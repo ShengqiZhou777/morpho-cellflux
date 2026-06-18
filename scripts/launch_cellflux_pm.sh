@@ -8,6 +8,7 @@ set -euo pipefail
 
 CELLFLUX_DIR=/home/ubuntu/data/sqzhou/projects/CellFlux
 TORCHRUN=/home/ubuntu/miniconda3/envs/pmf/bin/torchrun
+PROJECT_DIR=/home/ubuntu/data/sqzhou/projects/morpho-cellflux
 
 OUT=${OUT:-/home/ubuntu/data/sqzhou/projects/morpho-cellflux/outputs/cellflux_pm_lipid_ddp_v1}
 BATCH=${BATCH:-16}          # per-GPU batch size (16 -> ~25GB, safe through FID eval on 32GB)
@@ -21,6 +22,10 @@ NOISE_LEVEL=${NOISE_LEVEL:-0.2} # noise added to control when USE_INITIAL=2
 CFG=${CFG:-0.2}                 # classifier-free guidance scale at sampling
 CONFIG=${CONFIG:-perturbmulti_stronghits_id}  # CellFlux config (configs/<CONFIG>.yaml) -> data index + embedding
 DATASET=${DATASET:-perturbmulti_id}  # model arch: perturbmulti_id (condition_dim 204 = gene identity one-hot)
+
+if [[ -f "$PROJECT_DIR/configs/cellflux_external/${CONFIG}.yaml" ]]; then
+  cp "$PROJECT_DIR/configs/cellflux_external/${CONFIG}.yaml" "$CELLFLUX_DIR/configs/${CONFIG}.yaml"
+fi
 
 mkdir -p "$OUT"
 cd "$CELLFLUX_DIR"

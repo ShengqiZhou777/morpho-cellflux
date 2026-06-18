@@ -5,6 +5,8 @@ Produces, under data/processed/cellflux_ext/:
   perturbation_effects.csv               per-gene morphological |z| (18ch protein) + RNA SNR diagnostic + flags
   channel_effects.csv                    per-channel (18) effect ranking -> the evidence behind the image panel choice
   index_stronghits.csv                   strong-hit subset = morph top-TOP_K & n_cells>=MIN_CELLS_STRONGHIT (+ full control pool)
+  index_panel_signal.csv                 broader train subset with signal in panel2 [5,9,10] (+ full control pool)
+  index_highsignal.csv                   narrow figure subset for split-stable panel2 lead genes (+ full control pool)
   (the gene-identity embedding is built separately.)
 
 Modality semantics (see data/processed/cellflux_ext/README.md):
@@ -37,6 +39,17 @@ MIN_CELLS = 20  # min train cells for a stable per-gene signature
 TOP_K = 50      # top morphological-effect genes to flag as the focus set (cf. eval_panel n=50)
 LIPID_Z = 0.5   # |Perilipin z| to flag a lipid-droplet hit
 MIN_CELLS_STRONGHIT = 80  # min train cells for a gene to enter the strong-hit subset (cell gap: kept>=82, dropped<=70)
+PANEL_CHANNELS = [5, 9, 10]  # Perilipin, Calreticulin, pS6RP
+PANEL_SIGNAL_Z = 0.4
+HIGH_SIGNAL_GENES = [
+    # Stable, visually interpretable effects in panel2:
+    # Pten -> Perilipin+pS6RP, Eif2s1 -> Perilipin,
+    # Tsc1 -> pS6RP, Sel1l -> Calreticulin.
+    "Eif2s1",
+    "Pten",
+    "Sel1l",
+    "Tsc1",
+]
 
 
 def _dense_cols(X, rows, cols=None):
@@ -204,6 +217,54 @@ def main():
           f"{len(stronghit_genes)} strong-hit genes "
           f"(morph top-{TOP_K} & n_cells>={MIN_CELLS_STRONGHIT}) + full control pool")
     print(f"  genes: {stronghit_genes}")
+
+    # ---- 6. panel-signal train subset --------------------------------------
+    #        This is the recommended training subset for the current 3-channel
+    #        CellFlux runs: broader than the hand-picked figure genes, but still
+    #        restricted to perturbations with measurable signal in panel2.
+    panel_names = [prot_ch[i] for i in PANEL_CHANNELS]
+    panel_rows = []
+    for g in pert_genes:
+        idx = train_m.loc[train_m["target_gene"] == g, "protein_index"].to_numpy()
+        n = len(idx)
+        if n == 0:
+            panel_z = np.zeros(len(PANEL_CHANNELS))
+        else:
+            panel_z = (_dense_cols(Xp, idx, PANEL_CHANNELS).mean(axis=0) - pc_mean[PANEL_CHANNELS]) / pc_std[PANEL_CHANNELS]
+        rec = {
+            "target_gene": g,
+            "n_cells": int(n),
+            "panel_maxabs_z": float(np.abs(panel_z).max()),
+            "panel_lead_channel": panel_names[int(np.abs(panel_z).argmax())],
+        }
+        for name, zval in zip(panel_names, panel_z):
+            rec[f"{name}_z"] = float(zval)
+        panel_rows.append(rec)
+    panel_eff = pd.DataFrame(panel_rows).sort_values("panel_maxabs_z", ascending=False)
+    panel_eff.to_csv(os.path.join(OUT, "panel_effects.csv"), index=False)
+
+    panel_signal_genes = sorted(panel_eff.loc[
+        (panel_eff["n_cells"] >= MIN_CELLS_STRONGHIT)
+        & (panel_eff["panel_maxabs_z"] >= PANEL_SIGNAL_Z),
+        "target_gene",
+    ].tolist())
+    ps_idx = write_index(s, {"train": "train", "val": "test"},
+                         os.path.join(OUT, "index_panel_signal.csv"),
+                         genes=panel_signal_genes)
+    print(f"\nindex_panel_signal.csv: {len(ps_idx)} rows; "
+          f"{len(panel_signal_genes)} genes with panel max|z|>={PANEL_SIGNAL_Z} "
+          f"and n_cells>={MIN_CELLS_STRONGHIT} + full control pool")
+    print(f"  genes: {panel_signal_genes}")
+
+    # ---- 7. high-signal figure subset --------------------------------------
+    #        Keep this narrow subset for qualitative interpolation figures and
+    #        targeted aggregate checks. It is too small for the main training run.
+    hs_idx = write_index(s, {"train": "train", "val": "test"},
+                         os.path.join(OUT, "index_highsignal.csv"),
+                         genes=HIGH_SIGNAL_GENES)
+    print(f"\nindex_highsignal.csv: {len(hs_idx)} rows; "
+          f"{len(HIGH_SIGNAL_GENES)} high-signal genes + full control pool")
+    print(f"  genes: {HIGH_SIGNAL_GENES}")
 
 
 if __name__ == "__main__":
