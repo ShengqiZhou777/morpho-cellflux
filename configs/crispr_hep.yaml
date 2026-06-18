@@ -1,0 +1,39 @@
+project:
+  name: morpho-cellflux
+  description: Data factory for Perturb-Multi CRISPR hepatocytes.
+
+paths:
+  source_root: /home/ubuntu/data/sqzhou/projects/morpho-phenotyping
+  raw_dir: data/raw
+  processed_dir: data/processed
+  reports_dir: data/reports
+
+source_assets:
+  manifest: assets/paired_filtered/crispr/manifests/manifest_crispr_hep_paired.parquet
+  extracted_images: assets/paired_filtered/crispr/extracted_images
+  rna_h5ad: assets/paired_filtered/crispr/rna/RNA_crispr_hep_paired.h5ad
+  protein_h5ad: assets/paired_filtered/crispr/protein/protein_crispr_hep_paired.h5ad
+  decision_table: assets/paired_filtered/metadata/v6_decision_table.csv
+  eval_panel: assets/paired_filtered/metadata/eval_panel.json
+  paper: literature/Perturb-multimodal/Perturb-multimodal.md
+
+data:
+  image_key: x
+  image_shape: [18, 128, 128]
+  cell_type_filter: Hep
+  control_column: is_control
+  condition_column: target_gene
+  guide_column: sgRNA
+  split_column: split
+  match_columns: [batch, cluster_type]
+  control_split_policy: same_split
+  min_controls_per_stratum: 10
+  pairs_per_target: 1
+  random_seed: 17
+
+outputs:
+  manifest: data/processed/manifest.parquet
+  pairs_dir: data/processed/pairs
+  condition_vocab: data/processed/condition_vocab.json
+  audit_report: data/reports/data_audit.json
+

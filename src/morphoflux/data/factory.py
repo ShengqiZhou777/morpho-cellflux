@@ -325,7 +325,7 @@ class DataFactory:
             "source_root": str(self.paths.source_root),
             "raw_links": link_report,
             "raw_manifest_rows": int(len(raw)),
-            "cellflux_manifest_rows": int(len(manifest)),
+            "manifest_rows": int(len(manifest)),
             "counts": {
                 "controls": int(len(controls)),
                 "targets": int(len(targets)),

@@ -27,12 +27,12 @@ and unchanged. We only added a dataset/condition adapter + small fixes:
 
 ## How it's used
 - This engine is part of the `morphoflux` package: launched as
-  `torchrun -m morphoflux.engine.train` (see `scripts/launch_cellflux_pm.sh` and
-  `scripts/interpolate_cellflux.sh`).
+  `torchrun -m morphoflux.engine.train` (see `scripts/train.sh` and
+  `scripts/interpolate.sh`).
 - Configs live in `configs/*.yaml` (single source of truth). The loader
   resolves a bare `--config NAME` against `MORPHOFLUX_CONFIG_DIR` (default
   `configs/`), or accepts an absolute `.yaml` path.
-- Data paths inside those YAMLs point at `data/processed/cellflux_ext/` (this repo).
+- Data paths inside those YAMLs point at `data/processed/perturbmulti/` (this repo).
 
 The old external clone at `/home/ubuntu/data/sqzhou/projects/CellFlux` is DEPRECATED —
 do not edit it; this absorbed copy under `src/morphoflux/engine/` is the source of truth.

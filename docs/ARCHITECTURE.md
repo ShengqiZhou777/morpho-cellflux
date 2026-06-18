@@ -10,15 +10,15 @@ cell and a target gene (perturbation identity), generate the perturbed-cell pane
 raw assets (morpho-phenotyping)               external h5ad (RNA/protein) + manifest
         |                                                   |
         v                                                   v
-  morphoflux.data.DataFactory  ───────────►  scripts/build_cellflux_external.py
+  morphoflux.data.DataFactory  ───────────►  scripts/build_perturbmulti_data.py
   (scripts/materialize_data.py)              - index_stronghits.csv (strong-hit subset)
-  - cellflux_manifest.parquet                - embedding_gene_identity.csv (204 one-hot)
+  - manifest.parquet                - embedding_gene_identity.csv (204 one-hot)
   - condition_vocab.json                     - channel_effects.csv, perturbation_effects.csv
         |                                                   |
         └───────────────────────┬───────────────────────────┘
                                  v
             morphoflux.engine  (absorbed CellFlux flow-matching engine)
-            torchrun -m morphoflux.engine.train  (scripts/launch_cellflux_pm.sh)
+            torchrun -m morphoflux.engine.train  (scripts/train.sh)
             - conditional flow matching, control->perturbed, CFG, EMA, ODE sampling, FID
             - reads configs/<name>.yaml  (MORPHOFLUX_CONFIG_DIR)
             - writes outputs/<run>/: checkpoints, fid_samples/epoch-<e>/, log.txt
@@ -28,7 +28,7 @@ raw assets (morpho-phenotyping)               external h5ad (RNA/protein) + mani
             - aggregate_eval.py    : per-gene per-channel Δ-direction (the metric)
             - delta_scatter.py     : Δ-direction scatter (the quantitative figure)
             - population_phenotype.py : control vs generated vs KO distributions (visible effect)
-            - interpolate_cellflux.sh : CellFlux-style trajectory grid (qualitative)
+            - interpolate.sh : interpolation trajectory grid (qualitative)
             - mean_image_figure.py : per-gene spatial mean (documented NEGATIVE result)
 ```
 
@@ -57,7 +57,7 @@ pip install -e .            # registers morphoflux + engine (deps in pyproject)
 
 # train (2-GPU DDP), config resolved from configs/
 OUT=outputs/<run> CONFIG=perturbmulti_stronghits_id DATASET=perturbmulti_id \
-  bash scripts/launch_cellflux_pm.sh
+  bash scripts/train.sh
 
 # evaluate a run (per-gene Δ-direction for an epoch)
 python scripts/aggregate_eval.py outputs/<run> 3 <epoch>
@@ -66,7 +66,7 @@ python scripts/population_phenotype.py outputs/<run> lipid Eif2s1,Pten,Aars,Insi
 
 # qualitative interpolation grid on the best checkpoint
 CKPT=outputs/<run>/checkpoint-<e>.pth OUT=outputs/<run> \
-  CONFIG=perturbmulti_interp_leadgenes GPU=0 bash scripts/interpolate_cellflux.sh
+  CONFIG=perturbmulti_interp_leadgenes GPU=0 bash scripts/interpolate.sh
 ```
 
 ## Evaluation philosophy

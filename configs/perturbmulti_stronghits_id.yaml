@@ -19,8 +19,8 @@ modality_list:
   - Gene
 
 image_path: data/raw/extracted_images
-data_index_path: data/processed/cellflux_ext/index_stronghits.csv
-embedding_path: data/processed/cellflux_ext/embedding_gene_identity.csv
+data_index_path: data/processed/perturbmulti/index_stronghits.csv
+embedding_path: data/processed/perturbmulti/embedding_gene_identity.csv
 
 augment_train: False
 normalize: False

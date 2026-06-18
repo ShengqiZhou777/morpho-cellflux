@@ -1,7 +1,7 @@
-"""Build CellFlux-format external artifacts for the Perturb-Multi hepatocyte data.
+"""Build the engine-format data artifacts for the Perturb-Multi hepatocyte data.
 
-Produces, under data/processed/cellflux_ext/:
-  index_lipid_panel.csv / _heldout.csv   CellFlux data index (Hep, TIER1/2 + control)
+Produces, under data/processed/perturbmulti/:
+  index_lipid_panel.csv / _heldout.csv   data index (Hep, TIER1/2 + control)
   perturbation_effects.csv               per-gene morphological |z| (18ch protein) + RNA SNR diagnostic + flags
   channel_effects.csv                    per-channel (18) effect ranking -> the evidence behind the image panel choice
   index_stronghits.csv                   strong-hit subset = morph top-TOP_K & n_cells>=MIN_CELLS_STRONGHIT (+ full control pool)
@@ -9,7 +9,7 @@ Produces, under data/processed/cellflux_ext/:
   index_highsignal.csv                   narrow figure subset for split-stable panel2 lead genes (+ full control pool)
   (the gene-identity embedding is built separately.)
 
-Modality semantics (see data/processed/cellflux_ext/README.md):
+Modality semantics (see data/processed/perturbmulti/README.md):
 - Perturbation = sgRNA -> target gene (IDENTITY). The model condition is gene identity
   (embedding_gene_identity.csv, one-hot), NOT any RNA readout.
 - The 209-gene MERFISH RNA and the 18-ch morphology are measured READOUTS of the imaged
@@ -27,8 +27,8 @@ import pandas as pd
 import scipy.sparse as sp
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-OUT = os.path.join(ROOT, "data/processed/cellflux_ext")
-MANIFEST = os.path.join(ROOT, "data/processed/cellflux_manifest.parquet")
+OUT = os.path.join(ROOT, "data/processed/perturbmulti")
+MANIFEST = os.path.join(ROOT, "data/processed/manifest.parquet")
 VOCAB = os.path.join(ROOT, "data/processed/condition_vocab.json")
 RNA_H5AD = os.path.join(ROOT, "data/raw/RNA_crispr_hep_paired.h5ad")
 PROT_H5AD = os.path.join(ROOT, "data/raw/protein_crispr_hep_paired.h5ad")

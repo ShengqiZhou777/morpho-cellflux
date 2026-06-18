@@ -35,7 +35,7 @@ def main() -> None:
     audit = factory.materialize(make_links=not args.no_symlinks)
 
     summary = {
-        "manifest_rows": audit["cellflux_manifest_rows"],
+        "manifest_rows": audit["manifest_rows"],
         "controls": audit["counts"]["controls"],
         "targets": audit["counts"]["targets"],
         "target_genes": audit["counts"]["target_genes"],

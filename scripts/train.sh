@@ -3,7 +3,7 @@
 # Per-step stdout is persisted to $OUT/train_stdout.log.
 #
 # Override defaults via env vars, e.g.:
-#   OUT=outputs/my_run BATCH=16 ACCUM=2 EPOCHS=60 bash scripts/launch_cellflux_pm.sh
+#   OUT=outputs/my_run BATCH=16 ACCUM=2 EPOCHS=60 bash scripts/train.sh
 set -euo pipefail
 
 PROJECT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)

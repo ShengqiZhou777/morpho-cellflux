@@ -40,8 +40,8 @@ their outputs/checkpoints were deleted from the active workspace.
 
 ## Active Setup
 
-- **Data**: `data/processed/cellflux_ext/`, built by
-  `scripts/build_cellflux_external.py` from `cellflux_manifest.parquet`.
+- **Data**: `data/processed/perturbmulti/`, built by
+  `scripts/build_perturbmulti_data.py` from `manifest.parquet`.
 - **Image channels**: panel2 `[5,9,10]` =
   Perilipin / Calreticulin / pS6RP.
 - **Condition**: gene identity one-hot via `embedding_gene_identity.csv`.
@@ -102,9 +102,9 @@ correct biological direction.
 
 ## Scripts
 
-- `scripts/build_cellflux_external.py`: build indexes, identity embeddings, and
+- `scripts/build_perturbmulti_data.py`: build indexes, identity embeddings, and
   effect tables.
 - `scripts/aggregate_eval.py <run_dir>`: per-gene per-channel generated/source/target
   summary and correlations.
 - `scripts/analyze_perilipin_direction.py`: Perilipin direction analysis.
-- `scripts/launch_cellflux_pm.sh`: parameterized DDP launch with persistent logging.
+- `scripts/train.sh`: parameterized DDP launch with persistent logging.

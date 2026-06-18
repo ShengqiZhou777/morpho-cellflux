@@ -21,7 +21,7 @@
 #
 # Usage:
 #   CKPT=outputs/my_run/checkpoint-19.pth OUT=outputs/my_run GPU=0 \
-#     bash scripts/interpolate_cellflux.sh
+#     bash scripts/interpolate.sh
 set -euo pipefail
 
 PROJECT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
