@@ -6,9 +6,9 @@
 #   OUT=.../outputs/cellflux_pm_lipid_ddp_v2 BATCH=16 ACCUM=2 EPOCHS=60 bash scripts/launch_cellflux_pm.sh
 set -euo pipefail
 
-CELLFLUX_DIR=/home/ubuntu/data/sqzhou/projects/CellFlux
-TORCHRUN=/home/ubuntu/miniconda3/envs/pmf/bin/torchrun
 PROJECT_DIR=/home/ubuntu/data/sqzhou/projects/morpho-cellflux
+CELLFLUX_DIR=${CELLFLUX_DIR:-$PROJECT_DIR/cellflux}   # vendored CellFlux engine (now part of this repo)
+TORCHRUN=/home/ubuntu/miniconda3/envs/pmf/bin/torchrun
 
 OUT=${OUT:-/home/ubuntu/data/sqzhou/projects/morpho-cellflux/outputs/cellflux_pm_lipid_ddp_v1}
 BATCH=${BATCH:-16}          # per-GPU batch size (16 -> ~25GB, safe through FID eval on 32GB)

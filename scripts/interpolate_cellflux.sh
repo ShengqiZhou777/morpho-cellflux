@@ -29,9 +29,9 @@
 #   OUT=/.../cellflux_pm_geneid_baseline_v6 GPU=0 bash scripts/interpolate_cellflux.sh
 set -euo pipefail
 
-CELLFLUX_DIR=/home/ubuntu/data/sqzhou/projects/CellFlux
-TORCHRUN=/home/ubuntu/miniconda3/envs/pmf/bin/torchrun
 PROJECT_DIR=/home/ubuntu/data/sqzhou/projects/morpho-cellflux
+CELLFLUX_DIR=${CELLFLUX_DIR:-$PROJECT_DIR/cellflux}   # vendored CellFlux engine (now part of this repo)
+TORCHRUN=/home/ubuntu/miniconda3/envs/pmf/bin/torchrun
 
 CKPT=${CKPT:?set CKPT=<path to a checkpoint-*.pth>}
 OUT=${OUT:?set OUT=<output dir; interpolation/ is written under it>}
