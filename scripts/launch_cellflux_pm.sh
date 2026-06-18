@@ -7,7 +7,6 @@
 set -euo pipefail
 
 PROJECT_DIR=/home/ubuntu/data/sqzhou/projects/morpho-cellflux
-CELLFLUX_DIR=${CELLFLUX_DIR:-$PROJECT_DIR/cellflux}   # vendored CellFlux engine (now part of this repo)
 TORCHRUN=/home/ubuntu/miniconda3/envs/pmf/bin/torchrun
 
 OUT=${OUT:-/home/ubuntu/data/sqzhou/projects/morpho-cellflux/outputs/cellflux_pm_lipid_ddp_v1}
@@ -23,14 +22,11 @@ CFG=${CFG:-0.2}                 # classifier-free guidance scale at sampling
 CONFIG=${CONFIG:-perturbmulti_stronghits_id}  # CellFlux config (configs/<CONFIG>.yaml) -> data index + embedding
 DATASET=${DATASET:-perturbmulti_id}  # model arch: perturbmulti_id (condition_dim 204 = gene identity one-hot)
 
-if [[ -f "$PROJECT_DIR/configs/cellflux_external/${CONFIG}.yaml" ]]; then
-  cp "$PROJECT_DIR/configs/cellflux_external/${CONFIG}.yaml" "$CELLFLUX_DIR/configs/${CONFIG}.yaml"
-fi
-
 mkdir -p "$OUT"
-cd "$CELLFLUX_DIR"
+cd "$PROJECT_DIR"
 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \
-"$TORCHRUN" --standalone --nproc_per_node="$NPROC" train.py \
+CELLFLUX_CONFIG_DIR="$PROJECT_DIR/configs/cellflux" \
+"$TORCHRUN" --standalone --nproc_per_node="$NPROC" -m morphoflux.engine.train \
   --dataset "$DATASET" --config "$CONFIG" --device cuda \
   --batch_size "$BATCH" --accum_iter "$ACCUM" --num_workers 10 --epochs "$EPOCHS" \
   --use_initial "$USE_INITIAL" --noise_level "$NOISE_LEVEL" --use_ema --skewed_timesteps \

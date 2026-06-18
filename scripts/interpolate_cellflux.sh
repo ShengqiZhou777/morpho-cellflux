@@ -30,7 +30,6 @@
 set -euo pipefail
 
 PROJECT_DIR=/home/ubuntu/data/sqzhou/projects/morpho-cellflux
-CELLFLUX_DIR=${CELLFLUX_DIR:-$PROJECT_DIR/cellflux}   # vendored CellFlux engine (now part of this repo)
 TORCHRUN=/home/ubuntu/miniconda3/envs/pmf/bin/torchrun
 
 CKPT=${CKPT:?set CKPT=<path to a checkpoint-*.pth>}
@@ -47,12 +46,10 @@ EPOCHS=${EPOCHS:-1000000}         # huge: range(start_epoch, EPOCHS) must be non
                                   # start_epoch=ckpt_epoch+1; eval_only breaks after one iteration.
 
 mkdir -p "$OUT"
-if [[ -f "$PROJECT_DIR/configs/cellflux_external/${CONFIG}.yaml" ]]; then
-  cp "$PROJECT_DIR/configs/cellflux_external/${CONFIG}.yaml" "$CELLFLUX_DIR/configs/${CONFIG}.yaml"
-fi
-cd "$CELLFLUX_DIR"
+cd "$PROJECT_DIR"
 CUDA_VISIBLE_DEVICES="$GPU" PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \
-"$TORCHRUN" --standalone --nproc_per_node=1 train.py \
+CELLFLUX_CONFIG_DIR="$PROJECT_DIR/configs/cellflux" \
+"$TORCHRUN" --standalone --nproc_per_node=1 -m morphoflux.engine.train \
   --dataset "$DATASET" --config "$CONFIG" --device cuda \
   --eval_only --resume "$CKPT" --use_ema \
   --use_initial "$USE_INITIAL" --noise_level "$NOISE_LEVEL" --cfg_scale "$CFG" \

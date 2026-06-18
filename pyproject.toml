@@ -1,7 +1,7 @@
 [project]
 name = "morpho-cellflux"
 version = "0.1.0"
-description = "CellFlux-style data factory and training scaffold for Perturb-Multimodal CRISPR hepatocyte images."
+description = "Perturbation -> morphology generative modeling on Perturb-Multi CRISPR hepatocyte images: a data factory, an absorbed CellFlux flow-matching engine, and direction/population evaluation."
 requires-python = ">=3.10"
 dependencies = [
   "anndata",
@@ -10,7 +10,20 @@ dependencies = [
   "pyarrow",
   "pyyaml",
   "torch",
+  "torchvision",
+  "flow-matching",
+  "torchdiffeq",
+  "torchmetrics",
+  "pytorch-lightning",
+  "scikit-learn",
+  "scipy",
+  "matplotlib",
+  "pillow",
+  "tqdm",
 ]
+
+[project.optional-dependencies]
+cluster = ["submitit"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
