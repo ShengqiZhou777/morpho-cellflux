@@ -59,7 +59,7 @@ def main(args):
 
     logger.info(f"Initializing Dataset: {args.dataset}")
     transform_train = get_train_transform()
-    if args.dataset in ['bbbc021', 'rxrx1', 'cpg0000', 'perturbmulti_id']:
+    if args.dataset in ['bbbc021', 'rxrx1', 'cpg0000', 'perturbmulti_id', 'diet_id']:
         args.num_tasks = distributed_mode.get_world_size()
         num_tasks = args.num_tasks
         args.global_rank = distributed_mode.get_rank()
