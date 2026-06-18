@@ -38,9 +38,9 @@ not per-cell prediction.
 
 ## Current Approach & Status
 
-Training runs through the official **CellFlux** repo (`/home/ubuntu/data/sqzhou/projects/CellFlux`),
-not the original in-house pixel-space flow. The formulation is conditional flow
-matching, control→perturbed:
+Training runs through the **CellFlux** engine, now absorbed into this repo as
+`morphoflux.engine` (no longer the original in-house pixel-space flow). The formulation
+is conditional flow matching, control→perturbed:
 
 ```text
 x_t = (1 - t) * source + t * target ;  t ~ Uniform(0,1)

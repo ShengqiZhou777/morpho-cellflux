@@ -1,8 +1,8 @@
 # CellFlux-Repo Experiments (Perturb-Multi hepatocytes)
 
-Phase running the Perturb-Multi hepatocyte data through the official CellFlux repo
-(`/home/ubuntu/data/sqzhou/projects/CellFlux`) with the corrected perturbation
-semantics.
+Phase running the Perturb-Multi hepatocyte data through the CellFlux engine (absorbed
+into this repo as `morphoflux.engine`; see docs/ARCHITECTURE.md) with the corrected
+perturbation semantics.
 
 Dates: 2026-06-17 to 2026-06-18.
 
