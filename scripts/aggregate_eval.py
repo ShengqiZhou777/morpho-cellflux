@@ -65,7 +65,12 @@ def main():
     else:
         epoch_dir = sorted(glob.glob(f"{run}/fid_samples/epoch-*"),
                            key=lambda p: int(p.split("-")[-1]))[-1]
-    tp = f"{run}/fid_samples/trt2ctrl_idx.json"   # written only at end of eval; optional
+    # Prefer the per-epoch pairing (epoch-<e>/trt2ctrl_idx.json) so old epochs keep their
+    # OWN treated->control pairing; fall back to the global file for runs evaluated before
+    # the per-epoch fix landed.
+    tp_epoch = f"{epoch_dir}/trt2ctrl_idx.json"
+    tp_global = f"{run}/fid_samples/trt2ctrl_idx.json"
+    tp = tp_epoch if os.path.exists(tp_epoch) else tp_global
     trt2ctrl = json.load(open(tp)) if os.path.exists(tp) else {}
 
     rows = []
