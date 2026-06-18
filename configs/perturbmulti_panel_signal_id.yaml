@@ -1,6 +1,3 @@
-# Copy/symlink this file into /home/ubuntu/data/sqzhou/projects/CellFlux/configs/
-# before launching the official CellFlux training script.
-#
 # Perturb-Multi hepatocytes -- panel-signal training subset.
 # Condition = perturbation identity (target gene one-hot), not same-cell RNA readout.
 task_name: perturbmulti_panel_signal_id

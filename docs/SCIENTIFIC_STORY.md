@@ -55,7 +55,7 @@ biological direction. The active recipe is **gene-identity conditioning + matche
 control-init + classifier-free guidance**, evaluated in **aggregate** (per-gene
 per-channel direction), not per cell.
 
-- Live experiment log + current results: **`docs/CELLFLUX_EXPERIMENTS.md`**.
+- Live experiment log + current results: **`docs/EXPERIMENTS.md`**.
 - Old experiments that used measured MERFISH RNA readouts as conditioning signal were
   removed from the active workspace. MERFISH RNA is a phenotype/readout, not the
   perturbation condition.
