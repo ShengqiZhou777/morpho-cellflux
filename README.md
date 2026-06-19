@@ -14,7 +14,14 @@ running experiment log.
 
 | dataset | condition | control / treated | images | build script |
 |---|---|---|---|---|
-| **crispr** (`perturbmulti`) | gene identity (204-dim one-hot) | non-targeting / sgRNA-KO of 163 genes | `data/raw/extracted_images` | `scripts/build_perturbmulti_data.py` |
+| **crispr** (`perturbmulti`) | gene identity (204-dim one-hot*) | non-targeting / sgRNA-KO of 163 genes | `data/raw/extracted_images` | `scripts/build_perturbmulti_data.py` |
+| **diet** | diet state (3-dim one-hot) | adlib / fasted, hfd | `data/raw/diet_extracted_images` | `scripts/build_diet_data.py` |
+
+*The crispr condition is a 204-dim one-hot over the perturbation-barcode vocabulary: 202
+target genes + a non-targeting `control` class + a `__null__` (unassigned-guide QC) class.
+`__null__` and `control` are never used as training conditions — only the 163
+quality-passing genes are — so those two columns are always-zero padding that set
+`condition_dim = 204`.
 | **diet** | diet state (3-dim one-hot) | adlib / fasted, hfd | `data/raw/diet_extracted_images` | `scripts/build_diet_data.py` |
 
 Both feed the same engine (`dataset_name: perturbmulti`) and the same 3-channel image
@@ -130,9 +137,11 @@ python scripts/delta_scatter.py  outputs/my_run 3           # Δ-direction scatt
 python scripts/population_phenotype.py outputs/my_run lipid Eif2s1,Pten,Aars,Insig1 <epoch>
 ```
 
-Perturbation effects are subtle and the task is unpaired distribution->distribution, so
-**FID alone is misleading**. The honest signal is the per-gene Delta-direction (does the
-generated cell move from control toward the real KO) and the population phenotype shift.
+**FID is the primary image metric** (following CellFlux). We report it together with the
+per-gene Delta-direction (does the generated cell move from control toward the real KO)
+and the population phenotype shift, because for subtle perturbations a good FID does not
+by itself guarantee the correct biological movement — and FID can keep rising while the
+Delta-direction still improves, so do not select checkpoints on FID alone.
 
 ## Makefile shortcuts
 

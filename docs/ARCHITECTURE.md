@@ -13,7 +13,7 @@ raw assets (morpho-phenotyping)               external h5ad (RNA/protein) + mani
   morphoflux.data.DataFactory  ───────────►  scripts/build_perturbmulti_data.py
   (scripts/materialize_data.py)              - index_train.csv (all kept genes, 163)
   - manifest.parquet                - index_eval_leadgenes.csv (5-gene figure subset)
-  - condition_vocab.json                     - embedding_gene_identity.csv (204 one-hot)
+  - condition_vocab.json                     - embedding_gene_identity.csv (204 one-hot*)
                                              - channel_effects.csv, perturbation_effects.csv
         |                                                   |
         └───────────────────────┬───────────────────────────┘
@@ -45,7 +45,9 @@ raw assets (morpho-phenotyping)               external h5ad (RNA/protein) + mani
 - `data/` (gitignored), `outputs/` (gitignored), `docs/`.
 
 ## Modality semantics (pinned — do not muddle)
-- **Perturbation = sgRNA -> target gene IDENTITY** (the condition; 204-dim one-hot).
+- **Perturbation = sgRNA -> target gene IDENTITY** (the condition). 204-dim one-hot over
+  the barcode vocabulary = 202 target genes + `control` + `__null__` (unassigned-guide QC
+  class); only the 163 quality-passing genes are used as training conditions.
 - **209-gene MERFISH = a transcriptional READOUT** of the imaged cells (NOT the condition).
 - **18-channel protein/morphology = the imaging READOUT**; panel2 = npz `[5,9,10]` =
   Perilipin / Calreticulin / pS6RP. The model generates this 3-channel panel.
@@ -71,10 +73,13 @@ CKPT=outputs/<run>/checkpoint-<e>.pth OUT=outputs/<run> \
 ```
 
 ## Evaluation philosophy
-Perturbation effects here are subtle (in-vivo CRISPR) and the task is unpaired
-distribution->distribution, so **per-pixel / per-cell matching is ill-posed and FID alone
-is misleading**. The honest signal is the **per-gene Δ-direction** (does generated move
-from control toward the real KO, across genes) and the **population phenotype shift**
-(control vs generated vs KO distributions). The interpolation grid is qualitative only —
-its trajectory is always smooth, so it never stands alone as a correctness claim.
+**FID is the primary image-quality / distribution metric** (following CellFlux). Because
+the task is unpaired distribution->distribution and per-cell matching is ill-posed, we
+complement FID with **biological-direction metrics**: the **per-gene Δ-direction** (does
+generated move from control toward the real KO, across genes) and the **population
+phenotype shift** (control vs generated vs KO distributions). For subtle in-vivo CRISPR
+effects a good FID does not guarantee the right biological movement, so the two are
+reported together — and FID should not be the *sole* checkpoint-selection criterion (it
+can keep rising while Δ-direction still improves). The interpolation grid is qualitative
+only — its trajectory is always smooth, so it never stands alone as a correctness claim.
 

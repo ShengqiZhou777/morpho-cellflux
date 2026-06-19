@@ -34,7 +34,14 @@ their outputs/checkpoints were deleted from the active workspace.
 | stream | role | dim | source | status |
 |---|---|---:|---|---|
 | Image: Perilipin/Calreticulin/pS6RP (`npz` channels `[5,9,10]`) | morphology readout to generate | 3 x 128 x 128 | `extracted_images/<cell_id>.npz` | active target |
-| Perturbation gene identity | clean condition | 204 one-hot | `embedding_gene_identity.csv` | active baseline |
+| Perturbation gene identity | clean condition | 204 one-hot* | `embedding_gene_identity.csv` | active baseline |
+
+*The 204-dim one-hot spans the full perturbation-barcode vocabulary: **202 target genes
++ a non-targeting `control` class + a `__null__` (unassigned-guide) class**. `__null__`
+is the paper's "no confident guide called" QC bucket (guide called only at >3 molecules/
+cell); it carries no decision tier, so it never enters the training indices. Only the
+**163 quality-passing genes** actually appear as training conditions; the `control` and
+`__null__` columns are always-zero padding that fix `condition_dim = 204`.
 | Genome-wide Perturb-seq pseudobulk | independent rich condition | TBD | GSE275483 | pending |
 | 209-gene MERFISH RNA | transcriptional readout/phenotype | 209 | RNA h5ad / derived tables | evaluation/analysis only |
 
@@ -120,9 +127,10 @@ The important evaluation is aggregate, not per-cell:
 - Sign agreement and correlation by biology-relevant channels.
 - Pathway-level checks for lipid, ER/secretory, lysosome/autophagy, and mTOR markers.
 
-FID alone is not a reliable headline metric here because the perturbation effects
-are subtle and same-batch controls can score well while failing to move in the
-correct biological direction.
+FID is the primary image-quality metric (following CellFlux), but it is not sufficient
+on its own here: perturbation effects are subtle and same-batch controls can score a good
+FID while failing to move in the correct biological direction. Report FID together with
+the aggregate Δ-direction, and do not select checkpoints on FID alone.
 
 ## Diet Perturbation Line (2026-06-18 ->)
 
