@@ -27,6 +27,8 @@ import matplotlib.pyplot as plt
 from scipy.stats import pearsonr, spearmanr
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# Default image dir; overridden per-run from the run's args.json image_path in main()
+# so eval reads the SAME npz cells the run trained on (e.g. diet vs CRISPR).
 IMG = os.path.join(REPO_ROOT, "data/raw/extracted_images")
 CHANNELS = [("Perilipin", 0), ("Calreticulin", 1), ("pS6RP", 2)]  # RGB order == npz[[5,9,10]]
 NPZ_CH = [5, 9, 10]
@@ -55,12 +57,17 @@ def npz_panel_means(cid):
 
 
 def main():
+    global IMG
     run = sys.argv[1].rstrip("/")
     min_n = int(sys.argv[2]) if len(sys.argv) > 2 else 5
     use_initial = None
     aj = f"{run}/args.json"
     if os.path.exists(aj):
-        use_initial = json.load(open(aj)).get("use_initial")
+        _a = json.load(open(aj))
+        use_initial = _a.get("use_initial")
+        _ip = _a.get("image_path")
+        if _ip:
+            IMG = _ip if os.path.isabs(_ip) else os.path.join(REPO_ROOT, _ip)
     if len(sys.argv) > 3:
         epoch_dir = f"{run}/fid_samples/epoch-{sys.argv[3]}"
     else:
