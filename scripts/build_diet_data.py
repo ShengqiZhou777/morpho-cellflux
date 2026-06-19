@@ -14,8 +14,11 @@ effect are not separable here; that is inherent to the experiment, acceptable fo
 generative demo of the morphology shift, and noted in the README.
 
 Produces, under data/processed/diet/:
-  index_diet.csv        engine data index (adlib control + fasted/hfd treated, BATCH=0)
-  embedding_diet.csv    3x3 one-hot over {adlib, fasted, hfd} (the condition)
+  index_diet.csv          engine training index (adlib control + fasted/hfd treated, BATCH=0).
+                          SPLIT = {train->train, val->test}: the engine only reads the
+                          train/test folds, so original `val` becomes the in-loop eval fold.
+  index_diet_heldout.csv  same cells, original `test` split only -- final held-out eval.
+  embedding_diet.csv      3x3 one-hot over {adlib, fasted, hfd} (the condition)
 """
 import os
 
@@ -30,6 +33,14 @@ MANIFEST = ("/home/ubuntu/data/sqzhou/projects/morpho-phenotyping/assets/"
 CONTROL = "adlib"
 CONDITIONS = ["adlib", "fasted", "hfd"]  # embedding row order
 
+# The engine only iterates the 'train' and 'test' folds. Fold the original three-way
+# split as: train -> training fold, val -> in-loop eval fold, test -> a separate
+# held-out index. This mirrors scripts/build_perturbmulti_data.py so diet and crispr
+# share the same split semantics (without this remap the ~27k `val` cells were silently
+# dropped, since the loader never reads a 'val' fold).
+TRAIN_SPLIT = {"train": "train", "val": "test"}
+HELDOUT_SPLIT = {"test": "test"}
+
 
 def main():
     os.makedirs(OUT, exist_ok=True)
@@ -42,19 +53,36 @@ def main():
         "CPD_NAME": m["cond"].astype(str),
         "ANNOT": np.where(m["cond"] == CONTROL, "negative_control", "treated"),
         "BATCH": 0,  # collapsed: lets treated pair with any adlib control (see header)
-        "SPLIT": m["split"].astype(str),
+        "split_orig": m["split"].astype(str),
         "sgRNA": m["cond"].astype(str),     # no guides here; mirror schema with cond
         "cluster_type": m["cluster_type"].astype(str),
         "condition_id": m["cond"].map({c: i for i, c in enumerate(CONDITIONS)}),
     })
     print(f"diet manifest Hep rows: {len(s)}")
     print("cond x split:")
-    print(pd.crosstab(s["CPD_NAME"], s["SPLIT"]).to_string())
+    print(pd.crosstab(s["CPD_NAME"], s["split_orig"]).to_string())
 
-    out_index = os.path.join(OUT, "index_diet.csv")
-    s.reset_index(drop=True).to_csv(out_index)
-    print(f"\nwrote {out_index}: {len(s)} rows "
-          f"({(s.ANNOT=='treated').sum()} treated, {(s.ANNOT=='negative_control').sum()} control)")
+    cols = ["SAMPLE_KEY", "CPD_NAME", "ANNOT", "BATCH", "SPLIT",
+            "sgRNA", "cluster_type", "condition_id"]
+
+    def write_index(split_map, path):
+        # Apply split_map to every row (treated and adlib control alike). BATCH is
+        # collapsed to 0, so within each fold any treated cell can pair with any adlib
+        # control present in that fold; each original split already contains adlib.
+        d = s[s["split_orig"].isin(split_map)].copy()
+        d["SPLIT"] = d["split_orig"].map(split_map)
+        out = d[cols].reset_index(drop=True)
+        out.to_csv(path)  # index_col=0 on read
+        return out
+
+    train_idx = write_index(TRAIN_SPLIT, os.path.join(OUT, "index_diet.csv"))
+    held_idx = write_index(HELDOUT_SPLIT, os.path.join(OUT, "index_diet_heldout.csv"))
+    print(f"\nindex_diet.csv: {len(train_idx)} rows "
+          f"({(train_idx.ANNOT=='treated').sum()} treated, "
+          f"{(train_idx.ANNOT=='negative_control').sum()} control); "
+          f"train={int((train_idx.SPLIT=='train').sum())}, "
+          f"val->test={int((train_idx.SPLIT=='test').sum())}")
+    print(f"index_diet_heldout.csv: {len(held_idx)} rows (original test split)")
 
     emb = pd.DataFrame(np.eye(len(CONDITIONS)), index=CONDITIONS,
                        columns=[f"id_{c}" for c in CONDITIONS])

@@ -1,5 +1,5 @@
 # Perturb-Multi hepatocytes -- INTERPOLATION FIGURE subset (lead genes only).
-# Same setup as perturbmulti_stronghits_id (gene-identity one-hot, panel2 [5,9,10]),
+# Same setup as perturbmulti_train_id (gene-identity one-hot, panel2 [5,9,10]),
 # but the treated cells are restricted to 5 lead genes spanning all 3 channels so the
 # single interpolation eval batch always lands on genes with real signal:
 #   Pten, Eif2s1 -> Perilipin (steatosis);  Atp2a2 -> Calreticulin (UPR);
@@ -23,7 +23,7 @@ modality_list:
   - Gene
 
 image_path: data/raw/extracted_images
-data_index_path: data/processed/perturbmulti/index_interp_leadgenes.csv
+data_index_path: data/processed/perturbmulti/index_eval_leadgenes.csv
 embedding_path: data/processed/perturbmulti/embedding_gene_identity.csv
 
 augment_train: False

@@ -1,20 +1,26 @@
 """Build the engine-format data artifacts for the Perturb-Multi hepatocyte data.
 
 Produces, under data/processed/perturbmulti/:
-  index_lipid_panel.csv / _heldout.csv   data index (Hep, TIER1/2 + control)
-  perturbation_effects.csv               per-gene morphological |z| (18ch protein) + RNA SNR diagnostic + flags
-  channel_effects.csv                    per-channel (18) effect ranking -> the evidence behind the image panel choice
-  index_stronghits.csv                   strong-hit subset = morph top-TOP_K & n_cells>=MIN_CELLS_STRONGHIT (+ full control pool)
-  index_panel_signal.csv                 broader train subset with signal in panel2 [5,9,10] (+ full control pool)
-  index_highsignal.csv                   narrow figure subset for split-stable panel2 lead genes (+ full control pool)
-  (the gene-identity embedding is built separately.)
+  index_train.csv            TRAINING index: ALL kept genes (Hep, TIER1/2 + control).
+                             SPLIT = {train->train, val->test}: original `val` becomes
+                             the in-loop eval fold (the engine only reads train/test).
+  index_train_heldout.csv    Same genes, original `test` split only -- final held-out eval.
+  index_eval_leadgenes.csv   Figure/interpolation subset: lead genes spanning the 3 panel
+                             channels (Pten/Eif2s1 -> Perilipin, Atp2a2 -> Calreticulin,
+                             Cdc37/Tsc1 -> pS6RP). Same {train->train, val->test} mapping.
+  perturbation_effects.csv   per-gene morphological |z| (18ch protein) + RNA SNR diagnostic.
+  channel_effects.csv        per-channel (18) effect ranking -> evidence for the image panel.
+  panel_effects.csv          per-gene effect restricted to panel2 [5,9,10].
+
+The gene-identity embedding (embedding_gene_identity.csv) is built SEPARATELY and is NOT
+written here. There is no builder for it in this repo -- do not delete it.
 
 Modality semantics (see data/processed/perturbmulti/README.md):
 - Perturbation = sgRNA -> target gene (IDENTITY). The model condition is gene identity
   (embedding_gene_identity.csv, one-hot), NOT any RNA readout.
 - The 209-gene MERFISH RNA and the 18-ch morphology are measured READOUTS of the imaged
   cell. Here the 209 RNA only yields a per-gene effect-size (SNR) diagnostic; the 18-ch
-  protein gives the morphological effect size used for strong-hit selection.
+  protein gives the morphological effect size reported in the diagnostic tables.
 - Image channel panel: panel2 = Perilipin/Calreticulin/pS6RP (npz channels [5,9,10]).
 """
 
@@ -35,21 +41,22 @@ PROT_H5AD = os.path.join(ROOT, "data/raw/protein_crispr_hep_paired.h5ad")
 
 CONTROL_LABEL = "control"
 KEEP_DECISIONS = ["TRAIN_EVAL_TIER1", "TRAIN_EVAL_TIER2", "CONTROL"]
-MIN_CELLS = 20  # min train cells for a stable per-gene signature
-TOP_K = 50      # top morphological-effect genes to flag as the focus set (cf. eval_panel n=50)
-LIPID_Z = 0.5   # |Perilipin z| to flag a lipid-droplet hit
-MIN_CELLS_STRONGHIT = 80  # min train cells for a gene to enter the strong-hit subset (cell gap: kept>=82, dropped<=70)
+MIN_CELLS = 20  # min train cells for a stable per-gene RNA signature
+TOP_K = 50      # focus-set size for the diagnostic effect table (cf. eval_panel n=50)
+LIPID_Z = 0.5   # |Perilipin z| to flag a lipid-droplet hit (diagnostic only)
 PANEL_CHANNELS = [5, 9, 10]  # Perilipin, Calreticulin, pS6RP
-PANEL_SIGNAL_Z = 0.4
-HIGH_SIGNAL_GENES = [
-    # Stable, visually interpretable effects in panel2:
-    # Pten -> Perilipin+pS6RP, Eif2s1 -> Perilipin,
-    # Tsc1 -> pS6RP, Sel1l -> Calreticulin.
-    "Eif2s1",
-    "Pten",
-    "Sel1l",
-    "Tsc1",
-]
+
+# Lead genes for the qualitative interpolation figure: at least one per panel channel so
+# the single interpolation eval batch always lands on genes with real signal.
+#   Pten, Eif2s1 -> Perilipin (steatosis);  Atp2a2 -> Calreticulin (UPR);
+#   Cdc37, Tsc1  -> pS6RP (mTOR).  Pten also moves pS6RP.
+LEAD_GENES = ["Atp2a2", "Cdc37", "Eif2s1", "Pten", "Tsc1"]
+
+# Split maps. The engine only iterates the 'train' and 'test' folds, so the original
+# three-way split is folded as: train -> training fold, val -> in-loop eval fold,
+# test -> a separate held-out index for final evaluation.
+TRAIN_SPLIT = {"train": "train", "val": "test"}
+HELDOUT_SPLIT = {"test": "test"}
 
 
 def _dense_cols(X, rows, cols=None):
@@ -81,9 +88,9 @@ def main():
         # FULL control pool is added to every output split -- otherwise a batch
         # whose few controls all landed in one split crashes eval pairing
         # ("No control samples found in the same batch").
-        # genes (optional): restrict treated rows to this gene subset (controls
-        # are never filtered) -- used to carve the strong-hit index out of the
-        # same manifest so it stays consistent with index_lipid_panel.
+        # genes (optional): restrict treated rows to this gene subset (controls are
+        # never filtered) -- used to carve the lead-gene figure index out of the same
+        # manifest so it stays consistent with index_train.
         cols = ["SAMPLE_KEY", "CPD_NAME", "ANNOT", "BATCH", "SPLIT",
                 "sgRNA", "cluster_type", "condition_id"]
         treated = df[(~df["is_control"]) & (df["split"].isin(split_map))].copy()
@@ -100,16 +107,19 @@ def main():
         out.to_csv(path)  # index_col=0 on read
         return out
 
-    main_idx = write_index(s, {"train": "train", "val": "test"},
-                           os.path.join(OUT, "index_lipid_panel.csv"))
-    held_idx = write_index(s, {"test": "test"},
-                           os.path.join(OUT, "index_lipid_panel_heldout.csv"))
-    print(f"index_lipid_panel.csv: {len(main_idx)} rows "
-          f"(train={int((main_idx.SPLIT=='train').sum())}, "
-          f"test/val={int((main_idx.SPLIT=='test').sum())})")
-    print(f"index_lipid_panel_heldout.csv: {len(held_idx)} rows")
+    n_genes = int(s.loc[~s["is_control"], "CPD_NAME"].nunique())
+    train_idx = write_index(s, TRAIN_SPLIT, os.path.join(OUT, "index_train.csv"))
+    held_idx = write_index(s, HELDOUT_SPLIT, os.path.join(OUT, "index_train_heldout.csv"))
+    print(f"index_train.csv: {len(train_idx)} rows, {n_genes} genes "
+          f"(train={int((train_idx.SPLIT=='train').sum())}, "
+          f"val->test={int((train_idx.SPLIT=='test').sum())})")
+    print(f"index_train_heldout.csv: {len(held_idx)} rows (original test split)")
 
-    # ---- 2. per-gene RNA effect-size (SNR) for the effects table -------------
+    lead_idx = write_index(s, TRAIN_SPLIT, os.path.join(OUT, "index_eval_leadgenes.csv"),
+                           genes=LEAD_GENES)
+    print(f"index_eval_leadgenes.csv: {len(lead_idx)} rows; lead genes {LEAD_GENES}")
+
+    # ---- 2. per-gene RNA effect-size (SNR) for the diagnostic effects table ---
     #        Diagnostic only. The 209-gene MERFISH is a READOUT, never a condition;
     #        the perturbation condition is gene IDENTITY (embedding_gene_identity.csv).
     rna = ad.read_h5ad(RNA_H5AD, backed="r")
@@ -132,7 +142,7 @@ def main():
         z = (_dense_cols(Xr, idx).mean(axis=0) - ctrl_mean) / ctrl_std
         snr[g] = float(np.abs(z).max())
 
-    # ---- 3. morphological effect size from 18ch protein ---------------------
+    # ---- 3. morphological effect size from 18ch protein (diagnostic) ---------
     prot = ad.read_h5ad(PROT_H5AD, backed="r")
     prot_ch = list(map(str, prot.var_names))
     Xp = prot.X
@@ -165,19 +175,13 @@ def main():
           f"lipid hits (|Perilipin z|>={LIPID_Z}): {int(eff['lipid_hit'].sum())}")
     print("\ntop 15 morphological hits:")
     print(eff.head(15)[["target_gene", "n_cells", "morph_maxabs_z",
-                         "Perilipin_z", "rna_snr"]].to_string(index=False))
-    # lipid genes of interest from the paper
-    lipid = ["Insig1", "Pten", "Eif2s1", "Aars", "Srebf1", "Ldlr", "Scd1", "Fasn"]
-    print("\npaper lipid genes:")
-    print(eff[eff.target_gene.isin(lipid)][["target_gene", "n_cells",
-          "morph_maxabs_z", "Perilipin_z", "rna_snr"]].to_string(index=False))
+                        "Perilipin_z", "rna_snr"]].to_string(index=False))
 
     # ---- 4. per-channel effect ranking (evidence for the image panel choice) -
     #        For each of the 18 protein channels, how strongly is it moved by
     #        perturbation across genes (train cells, >=50/gene)? max|z| can be
     #        inflated by trivial on-target self-knockdown (e.g. Gapdh->Gapdh), so
     #        also report top3-mean and #genes with |z|>0.5 (breadth of response).
-    #        npz_ch = channel index into the saved <cell>.npz['x'] (== var order).
     zrows = {}
     for g in pert_genes:
         idx = train_m.loc[train_m["target_gene"] == g, "protein_index"].to_numpy()
@@ -199,29 +203,9 @@ def main():
           f"{len(zrows)} genes (>=50 train cells). current panel npz[5,9,10]:")
     print(chan.to_string(float_format=lambda x: f"{x:.2f}"))
 
-    # ---- 5. strong-hit subset index ----------------------------------------
-    #        SELECTION CRITERION (our heuristic, NOT a list from the paper): genes
-    #        flagged morph_significant (top-TOP_K by morph_maxabs_z over all 18
-    #        channels) AND with >= MIN_CELLS_STRONGHIT train cells. The paper only
-    #        states ~84/406 sgRNAs are morphologically significant (Fig S7H); the
-    #        exact gene set here is ours. Carved from the same `s` manifest as
-    #        index_lipid_panel (treated rows restricted to the subset; the full
-    #        control pool is kept) so the two indices stay consistent.
-    stronghit_genes = sorted(eff.loc[eff["morph_significant"]
-                             & (eff["n_cells"] >= MIN_CELLS_STRONGHIT),
-                             "target_gene"].tolist())
-    sh_idx = write_index(s, {"train": "train", "val": "test"},
-                         os.path.join(OUT, "index_stronghits.csv"),
-                         genes=stronghit_genes)
-    print(f"\nindex_stronghits.csv: {len(sh_idx)} rows; "
-          f"{len(stronghit_genes)} strong-hit genes "
-          f"(morph top-{TOP_K} & n_cells>={MIN_CELLS_STRONGHIT}) + full control pool")
-    print(f"  genes: {stronghit_genes}")
-
-    # ---- 6. panel-signal train subset --------------------------------------
-    #        This is the recommended training subset for the current 3-channel
-    #        CellFlux runs: broader than the hand-picked figure genes, but still
-    #        restricted to perturbations with measurable signal in panel2.
+    # ---- 5. per-gene panel-only effect table (diagnostic) -------------------
+    #        Effect restricted to the 3 panel channels. Kept as evidence for which
+    #        genes carry visible signal in panel2; NOT used to subset training.
     panel_names = [prot_ch[i] for i in PANEL_CHANNELS]
     panel_rows = []
     for g in pert_genes:
@@ -242,29 +226,7 @@ def main():
         panel_rows.append(rec)
     panel_eff = pd.DataFrame(panel_rows).sort_values("panel_maxabs_z", ascending=False)
     panel_eff.to_csv(os.path.join(OUT, "panel_effects.csv"), index=False)
-
-    panel_signal_genes = sorted(panel_eff.loc[
-        (panel_eff["n_cells"] >= MIN_CELLS_STRONGHIT)
-        & (panel_eff["panel_maxabs_z"] >= PANEL_SIGNAL_Z),
-        "target_gene",
-    ].tolist())
-    ps_idx = write_index(s, {"train": "train", "val": "test"},
-                         os.path.join(OUT, "index_panel_signal.csv"),
-                         genes=panel_signal_genes)
-    print(f"\nindex_panel_signal.csv: {len(ps_idx)} rows; "
-          f"{len(panel_signal_genes)} genes with panel max|z|>={PANEL_SIGNAL_Z} "
-          f"and n_cells>={MIN_CELLS_STRONGHIT} + full control pool")
-    print(f"  genes: {panel_signal_genes}")
-
-    # ---- 7. high-signal figure subset --------------------------------------
-    #        Keep this narrow subset for qualitative interpolation figures and
-    #        targeted aggregate checks. It is too small for the main training run.
-    hs_idx = write_index(s, {"train": "train", "val": "test"},
-                         os.path.join(OUT, "index_highsignal.csv"),
-                         genes=HIGH_SIGNAL_GENES)
-    print(f"\nindex_highsignal.csv: {len(hs_idx)} rows; "
-          f"{len(HIGH_SIGNAL_GENES)} high-signal genes + full control pool")
-    print(f"  genes: {HIGH_SIGNAL_GENES}")
+    print(f"\npanel_effects.csv: {len(panel_eff)} genes ranked by panel2 max|z|.")
 
 
 if __name__ == "__main__":

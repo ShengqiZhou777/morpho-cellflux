@@ -4,7 +4,7 @@ Phase running the Perturb-Multi hepatocyte data through the CellFlux engine (abs
 into this repo as `morphoflux.engine`; see docs/ARCHITECTURE.md) with the corrected
 perturbation semantics.
 
-Dates: 2026-06-17 to 2026-06-18.
+Dates: 2026-06-17 to 2026-06-19.
 
 ## Modality Flow (Pinned)
 
@@ -46,6 +46,25 @@ their outputs/checkpoints were deleted from the active workspace.
   Perilipin / Calreticulin / pS6RP.
 - **Condition**: gene identity one-hot via `embedding_gene_identity.csv`.
 - **Dataset/config family**: `perturbmulti_id`.
+
+### Data indices (current scheme, 2026-06-19)
+
+Collapsed from 6 overlapping gene-subset indices to **two** + a held-out variant. The
+engine only reads the `train` and `test` folds, so the original three-way split is folded
+as `train -> train`, `val -> test` (in-loop eval fold), and original `test -> *_heldout`
+(final held-out eval). crispr and diet now share this split semantics.
+
+| index | genes | rows (train / val->test) | config | role |
+|---|---:|---|---|---|
+| `index_train.csv` | 163 (all kept) | 65,132 (51,113 / 14,019) | `perturbmulti_train_id` | **main training** |
+| `index_train_heldout.csv` | 163 | 13,936 (orig test) | — | final held-out eval |
+| `index_eval_leadgenes.csv` | 5 lead | 8,874 (4,779 / 4,095) | `perturbmulti_interp_leadgenes` | interpolation figure |
+
+Training now uses **all 163 kept genes** (TIER1/2), not the prior 29-gene strong-hit
+subset: every kept gene has >=80 cells and same-batch controls, so the narrow subset was
+discarding ~5x the data for no pairing benefit. `perturbation_effects.csv`,
+`channel_effects.csv`, and `panel_effects.csv` are kept as diagnostics (they justify the
+channel panel and lead-gene picks) but no longer gate the training set.
 - **Task**: distribution-to-distribution control -> perturbed morphology. The source
   and target cells are unpaired; the model should be evaluated by aggregate
   perturbation response, not pixel-level single-cell matching.
@@ -54,6 +73,11 @@ their outputs/checkpoints were deleted from the active workspace.
   evaluation.
 
 ## Active Runs
+
+> These runs predate the 2026-06-19 index consolidation and were trained on the legacy
+> gene-subset indices (`index_stronghits` / `index_highsignal` / `index_panel_signal`,
+> now removed). New runs train on `index_train.csv` (all 163 genes). The checkpoints
+> remain valid; only the index files were renamed/merged.
 
 | run | condition | index | status |
 |---|---|---|---|
@@ -100,10 +124,54 @@ FID alone is not a reliable headline metric here because the perturbation effect
 are subtle and same-batch controls can score well while failing to move in the
 correct biological direction.
 
+## Diet Perturbation Line (2026-06-18 ->)
+
+The gene-identity claim above is clean, but the per-cell control -> perturbed figure
+hit a data ceiling: CRISPR KO morphology shifts are << cell-to-cell variance, so no
+single-cell interpolation is visible. Diet is a strong physiological perturbation on
+the same 18-channel MERFISH hepatocyte platform (HFD steatosis -> lipid accumulation),
+so the aggregate shift should be large enough to show a CellFlux-style interpolation.
+
+- **Condition**: 3-dim diet one-hot, `control = adlib`, `treated = {fasted, hfd}`
+  (`data/processed/diet/embedding_diet.csv`).
+- **Confound (known limitation)**: diet is confounded with imaging batch (adlib in
+  batches 1,2; fasted 3,6; hfd 4,5). The engine pairs each treated cell with a
+  same-BATCH control, so BATCH is collapsed to 0 to let any treated cell pair with any
+  adlib control. Batch effects therefore ride along with the diet signal.
+- **Arch/config**: `diet_id` (copy of `perturbmulti_id`, condition_dim 204 -> 3),
+  `configs/diet_id.yaml`, `dataset_name=perturbmulti` loader, panel2 `[5,9,10]` =
+  Perilipin / Calreticulin / pS6RP, images `data/raw/diet_extracted_images`.
+
+### Run `diet_id_v1`
+
+2-GPU, batch 16, 12 epochs (eval every 2), lr 1e-4, cfg_scale 0.2, EMA on,
+`use_initial=1`, noise_level 0.2 / noise_prob 0.5, midpoint ODE step 0.02,
+1024 FID samples. Finished 2026-06-19, training time 8:46:35.
+
+| epoch | 1 | 3 | 5 | 7 | 9 | 11 |
+|---|---:|---:|---:|---:|---:|---:|
+| eval_fid | 24.87 | 40.51 | 33.54 | 37.76 | 51.20 | 61.62 |
+| train_loss | .0102 | .0077 | .0063 | .0055 | .0049 | .0045 |
+
+eval_fid is **best at epoch 1** and trends upward thereafter (dip at epoch 5) while
+train_loss keeps falling: the model fits the training distribution but its sampled FID
+drifts away. Best-FID checkpoint is `checkpoint-1.pth` -- do not assume the last
+checkpoint is best. Consistent with the FID caveat above, this is not yet a result;
+the diet line still needs aggregate-direction and per-channel evaluation (esp.
+Perilipin/lipid for HFD) before any visual-interpolation claim.
+
 ## Scripts
 
-- `scripts/build_perturbmulti_data.py`: build indexes, identity embeddings, and
-  effect tables.
+- `scripts/build_perturbmulti_data.py`: build `index_train` (all 163 kept genes),
+  `index_train_heldout` (original test split), `index_eval_leadgenes` (5-gene figure
+  subset), and the diagnostic effect tables. Does NOT write `embedding_gene_identity.csv`
+  (built separately; no builder in-repo, do not delete).
+- `scripts/audit_diet_assets.py`: audit diet paired assets (sample counts +
+  diet/batch confound) before adapting them to the engine.
+- `scripts/build_diet_data.py`: build the diet index and 3-dim diet one-hot
+  embedding (`index_diet.csv`, `index_diet_heldout.csv`, `embedding_diet.csv`);
+  control=adlib, treated=fasted/hfd, BATCH collapsed to 0, same `train`/`val->test`/
+  `test->heldout` split semantics as the perturbmulti build.
 - `scripts/aggregate_eval.py <run_dir>`: per-gene per-channel generated/source/target
   summary and correlations.
 - `scripts/analyze_perilipin_direction.py`: Perilipin direction analysis.

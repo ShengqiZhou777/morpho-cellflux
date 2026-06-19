@@ -11,9 +11,10 @@ raw assets (morpho-phenotyping)               external h5ad (RNA/protein) + mani
         |                                                   |
         v                                                   v
   morphoflux.data.DataFactory  ───────────►  scripts/build_perturbmulti_data.py
-  (scripts/materialize_data.py)              - index_stronghits.csv (strong-hit subset)
-  - manifest.parquet                - embedding_gene_identity.csv (204 one-hot)
-  - condition_vocab.json                     - channel_effects.csv, perturbation_effects.csv
+  (scripts/materialize_data.py)              - index_train.csv (all kept genes, 163)
+  - manifest.parquet                - index_eval_leadgenes.csv (5-gene figure subset)
+  - condition_vocab.json                     - embedding_gene_identity.csv (204 one-hot)
+                                             - channel_effects.csv, perturbation_effects.csv
         |                                                   |
         └───────────────────────┬───────────────────────────┘
                                  v
@@ -56,7 +57,7 @@ raw assets (morpho-phenotyping)               external h5ad (RNA/protein) + mani
 pip install -e .            # registers morphoflux + engine (deps in pyproject)
 
 # train (2-GPU DDP), config resolved from configs/
-OUT=outputs/<run> CONFIG=perturbmulti_stronghits_id DATASET=perturbmulti_id \
+OUT=outputs/<run> CONFIG=perturbmulti_train_id DATASET=perturbmulti_id \
   bash scripts/train.sh
 
 # evaluate a run (per-gene Δ-direction for an epoch)

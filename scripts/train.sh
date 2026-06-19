@@ -19,7 +19,7 @@ NPROC=${NPROC:-2}
 USE_INITIAL=${USE_INITIAL:-1}   # 0 = noise to target, 1 = control init, 2 = control plus noise.
 NOISE_LEVEL=${NOISE_LEVEL:-0.2} # noise added to the control image when USE_INITIAL=2.
 CFG=${CFG:-0.2}                 # classifier-free guidance scale at sampling.
-CONFIG=${CONFIG:-perturbmulti_stronghits_id}  # config name under configs/, selects the data index and embedding.
+CONFIG=${CONFIG:-perturbmulti_train_id}        # config name under configs/, selects the data index and embedding.
 DATASET=${DATASET:-perturbmulti_id}           # model arch. perturbmulti_id has condition_dim 204 (gene-identity one-hot).
 
 mkdir -p "$OUT"

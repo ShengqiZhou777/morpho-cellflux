@@ -1,59 +1,32 @@
 .SHELLFLAGS := -lc
 SHELL := /bin/bash
 
-.PHONY: data train train-long train-scaffold train-puncta-ddp train-lipid-panel-ddp train-lipid-panel-faithful-ddp train-lipid-panel-adapted-ddp ddp-sanity smoke-train export-preview
+CONDA := source /home/ubuntu/miniconda3/etc/profile.d/conda.sh && conda activate pmf
 
+.PHONY: data build-perturbmulti build-diet train train-diet interpolate smoke
+
+# ---- data ----
 data:
-	source /home/ubuntu/miniconda3/etc/profile.d/conda.sh && \
-	conda activate pmf && \
-	python scripts/materialize_data.py --config configs/crispr_hep.yaml
+	$(CONDA) && python scripts/materialize_data.py --config configs/crispr_hep.yaml
 
+build-perturbmulti:
+	$(CONDA) && python scripts/build_perturbmulti_data.py
+
+build-diet:
+	$(CONDA) && python scripts/build_diet_data.py
+
+# ---- training (scripts/train.sh is env-var parameterized) ----
 train:
-	source /home/ubuntu/miniconda3/etc/profile.d/conda.sh && \
-	conda activate pmf && \
-	torchrun --standalone --nproc_per_node=2 scripts/train_cellflux.py --config configs/train_cellflux.yaml
+	$(CONDA) && OUT=outputs/perturbmulti_run bash scripts/train.sh
 
-train-long:
-	source /home/ubuntu/miniconda3/etc/profile.d/conda.sh && \
-	conda activate pmf && \
-	torchrun --standalone --nproc_per_node=2 scripts/train_cellflux.py --config configs/train_cellflux.yaml --max-steps 10000 --batch-size 8 --output-dir outputs/cellflux_long_10k
+train-diet:
+	$(CONDA) && OUT=outputs/diet_run CONFIG=diet_id DATASET=diet_id bash scripts/train.sh
 
-train-scaffold:
-	source /home/ubuntu/miniconda3/etc/profile.d/conda.sh && \
-	conda activate pmf && \
-	torchrun --standalone --nproc_per_node=2 scripts/train_cellflux.py --config configs/train_cellflux_scaffold.yaml --max-steps 5000 --batch-size 8 --output-dir outputs/cellflux_scaffold_5k
+# ---- figures ----
+interpolate:
+	$(CONDA) && CKPT=$(CKPT) OUT=$(OUT) GPU=$(or $(GPU),0) bash scripts/interpolate.sh
 
-train-puncta-ddp:
-	source /home/ubuntu/miniconda3/etc/profile.d/conda.sh && \
-	conda activate pmf && \
-	torchrun --standalone --nproc_per_node=2 scripts/train_cellflux.py --config configs/train_cellflux_scaffold_mean_puncta.yaml --max-steps 2000 --batch-size 160 --output-dir outputs/cellflux_scaffold_mean_puncta_residual_ddp_bs160_2k
-
-train-lipid-panel-ddp:
-	source /home/ubuntu/miniconda3/etc/profile.d/conda.sh && \
-	conda activate pmf && \
-	torchrun --standalone --nproc_per_node=2 scripts/train_cellflux.py --config configs/train_cellflux_lipid_panel.yaml --max-steps 2000 --batch-size 160 --output-dir outputs/cellflux_lipid_panel_scaffold_ddp_bs160_2k
-
-train-lipid-panel-faithful-ddp:
-	source /home/ubuntu/miniconda3/etc/profile.d/conda.sh && \
-	conda activate pmf && \
-	PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True torchrun --standalone --nproc_per_node=2 scripts/train_cellflux.py --config configs/train_cellflux_lipid_panel_faithful.yaml --max-steps 6000 --batch-size 156 --output-dir outputs/cellflux_lipid_panel_faithful_ddp_bs156_6k
-
-train-lipid-panel-adapted-ddp:
-	source /home/ubuntu/miniconda3/etc/profile.d/conda.sh && \
-	conda activate pmf && \
-	PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True torchrun --standalone --nproc_per_node=2 scripts/train_cellflux.py --config configs/train_cellflux_lipid_panel_adapted.yaml --max-steps 6000 --batch-size 156 --output-dir outputs/cellflux_lipid_panel_adapted_ddp_bs156_noise010_6k
-
-ddp-sanity:
-	source /home/ubuntu/miniconda3/etc/profile.d/conda.sh && \
-	conda activate pmf && \
-	torchrun --standalone --nproc_per_node=2 scripts/train_cellflux.py --config configs/train_cellflux_lipid_panel.yaml --max-steps 2 --batch-size 128 --limit-train-rows 256 --limit-val-rows 128 --output-dir outputs/ddp_sanity
-
-smoke-train:
-	source /home/ubuntu/miniconda3/etc/profile.d/conda.sh && \
-	conda activate pmf && \
-	python scripts/train_cellflux.py --device cpu --max-steps 2 --batch-size 1 --limit-train-rows 4 --limit-val-rows 2
-
-export-preview:
-	source /home/ubuntu/miniconda3/etc/profile.d/conda.sh && \
-	conda activate pmf && \
-	python scripts/export_preview_jpg.py outputs/cellflux_long_10k/previews/step_0010000.npz --sample 0 --out-dir outputs/cellflux_long_10k/jpg_previews
+# ---- quick 1-GPU sanity run ----
+smoke:
+	$(CONDA) && OUT=outputs/smoke NPROC=1 BATCH=4 EPOCHS=1 EVAL_FREQ=1000 FID_SAMPLES=16 \
+	  bash scripts/train.sh
