@@ -109,6 +109,15 @@ def read_files_pert(file_names, mols, mol2id, y2id, dose, y, transform, image_pa
         # Direct npz load by cell_id; same-batch ctrl pairing already done above.
         img_ctrl = _load_perturbmulti(image_path, img_file_ctrl)
         img_trt = _load_perturbmulti(image_path, img_file_trt)
+        # Range-safe flip augmentation. CustomTransform's noise/normalize path assumes
+        # [0,255] inputs and is bypassed for perturbmulti, so apply flips directly to the
+        # [-1,1] tensors when augmentation is on (train fold + augment_train). Flips do not
+        # change pixel values, so the [-1,1] range is preserved; ctrl/trt flip together.
+        if getattr(transform, "augment", False):
+            if torch.rand(1).item() < 0.3:
+                img_ctrl, img_trt = torch.flip(img_ctrl, [-1]), torch.flip(img_trt, [-1])
+            if torch.rand(1).item() < 0.3:
+                img_ctrl, img_trt = torch.flip(img_ctrl, [-2]), torch.flip(img_trt, [-2])
         return {
             'X': (img_ctrl, img_trt),
             'mols': mol2id[mols["trt"][idx_trt]],

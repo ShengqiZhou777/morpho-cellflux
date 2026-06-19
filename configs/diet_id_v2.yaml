@@ -1,0 +1,30 @@
+# Diet v2: same data/condition as diet_id, but with flip augmentation ENABLED to fight
+# the diet_id_v1 weaknesses (cell-area shrink that worsens with training + under-resolved
+# lipid droplets). augment_train now takes effect for perturbmulti via the range-safe flip
+# patch in data_utils.read_files_pert. normalize stays False (CustomTransform's [0,255]
+# noise/normalize path is bypassed for perturbmulti and would corrupt the [-1,1] tensors).
+# Launch (queued to auto-start after v7 frees the GPUs):
+#   OUT=outputs/diet_id_v2 CONFIG=diet_id_v2 DATASET=diet_id USE_INITIAL=1 CFG=0.2 \
+#     EPOCHS=12 EVAL_FREQ=2 NPROC=2 BATCH=16 bash scripts/train.sh
+task_name: diet_id
+
+ood_set: Null
+mol_list: Null
+trainable_emb: False
+dataset_name: 'perturbmulti'
+n_channels: 3
+multimodal: False
+batch_correction: False
+batch_key: Null
+use_condition_embeddings: False
+add_controls: False
+condition_embedding_dimension: null
+modality_list:
+  - Gene
+
+image_path: data/raw/diet_extracted_images
+data_index_path: data/processed/diet/index_diet.csv
+embedding_path: data/processed/diet/embedding_diet.csv
+
+augment_train: True
+normalize: False
