@@ -59,7 +59,7 @@ def main(args):
 
     logger.info(f"Initializing Dataset: {args.dataset}")
     transform_train = get_train_transform()
-    if args.dataset in ['bbbc021', 'rxrx1', 'cpg0000', 'perturbmulti_id', 'diet_id']:
+    if args.dataset in ['bbbc021', 'rxrx1', 'cpg0000', 'perturbmulti_id', 'perturbmulti_idsig', 'diet_id']:
         args.num_tasks = distributed_mode.get_world_size()
         num_tasks = args.num_tasks
         args.global_rank = distributed_mode.get_rank()
@@ -128,7 +128,7 @@ def main(args):
         logger.info("Generating From Control Image!!!!!")
     else:
         logger.info("Generating From Random Noise Image!!!!!")
-    
+
     logger.info(f"Start from {args.start_epoch} to {args.epochs} epochs")
     start_time = time.time()
     for epoch in tqdm(range(args.start_epoch, args.epochs)):
@@ -179,7 +179,7 @@ def main(args):
                 )
             else:
                 fid_samples = args.fid_samples // num_tasks
-            
+
             eval_stats = eval_model(
                 model,
                 data_loader_test,
@@ -204,7 +204,7 @@ def main(args):
 
         if args.test_run or args.eval_only:
             break
-    
+
     total_time = time.time() - start_time
     total_time_str = str(datetime.timedelta(seconds=int(total_time)))
     logger.info(f"Training time {total_time_str}")

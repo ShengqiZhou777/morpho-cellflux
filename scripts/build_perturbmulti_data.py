@@ -1,7 +1,8 @@
 """Build the engine-format data artifacts for the Perturb-Multi hepatocyte data.
 
 Produces, under data/processed/perturbmulti/:
-  index_train.csv            TRAINING index: ALL kept genes (Hep, TIER1/2 + control).
+  index_train.csv            TRAINING index: Hep, TIER1/2 genes that PASS the rna_snr
+                             perturbation-validity filter (>= RNA_SNR_MIN) + control.
                              SPLIT = {train->train, val->test}: original `val` becomes
                              the in-loop eval fold (the engine only reads train/test).
   index_train_heldout.csv    Same genes, original `test` split only -- final held-out eval.
@@ -21,7 +22,8 @@ Modality semantics (see data/processed/perturbmulti/README.md):
 - The 209-gene MERFISH RNA and the 18-ch morphology are measured READOUTS of the imaged
   cell. Here the 209 RNA only yields a per-gene effect-size (SNR) diagnostic; the 18-ch
   protein gives the morphological effect size reported in the diagnostic tables.
-- Image channel panel: panel2 = Perilipin/Calreticulin/pS6RP (npz channels [5,9,10]).
+- Image channel panel is chosen PER CONFIG (configs/*.yaml "channels"); this builder only
+  produces the per-channel effect evidence (channel_effects.csv) used to pick it.
 """
 
 import json
@@ -42,6 +44,9 @@ PROT_H5AD = os.path.join(ROOT, "data/raw/protein_crispr_hep_paired.h5ad")
 CONTROL_LABEL = "control"
 KEEP_DECISIONS = ["TRAIN_EVAL_TIER1", "TRAIN_EVAL_TIER2", "CONTROL"]
 MIN_CELLS = 20  # min train cells for a stable per-gene RNA signature
+RNA_SNR_MIN = 0.3  # perturbation-VALIDITY gate: drop treated genes whose sgRNA did not move
+                   # the transcriptome (max|z| over MERFISH RNA < this). Legit preprocessing
+                   # (filters on the perturbation input, NOT the morphology readout scored).
 TOP_K = 50      # focus-set size for the diagnostic effect table (cf. eval_panel n=50)
 LIPID_Z = 0.5   # |Perilipin z| to flag a lipid-droplet hit (diagnostic only)
 PANEL_CHANNELS = [5, 9, 10]  # Perilipin, Calreticulin, pS6RP
@@ -74,8 +79,34 @@ def main():
     pert_genes = [g for g in vocab if g != CONTROL_LABEL]
     print(f"manifest rows={len(m)}  perturbation genes={len(pert_genes)}")
 
+    # ---- 0. per-gene RNA effect-size (SNR): perturbation-VALIDITY signal, computed up
+    #        front so it can gate the training index. RNA is a READOUT used only for this
+    #        validity filter + diagnostics, never as the model condition (= gene identity).
+    rna = ad.read_h5ad(RNA_H5AD, backed="r")
+    Xr = rna.X
+    train_m = m[m["split"] == "train"]
+    ctrl_rows = train_m.loc[train_m["is_control"], "rna_index"].to_numpy()
+    ctrl = _dense_cols(Xr, ctrl_rows)
+    ctrl_mean = ctrl.mean(axis=0)
+    ctrl_std = ctrl.std(axis=0) + 1e-6
+    print(f"RNA: {rna.shape}  control train cells={len(ctrl_rows)}")
+    snr = {}
+    for g in pert_genes:
+        idx = train_m.loc[train_m["target_gene"] == g, "rna_index"].to_numpy()
+        if len(idx) < MIN_CELLS:
+            idx = m.loc[m["target_gene"] == g, "rna_index"].to_numpy()
+        if len(idx) == 0:
+            snr[g] = 0.0
+            continue
+        z = (_dense_cols(Xr, idx).mean(axis=0) - ctrl_mean) / ctrl_std
+        snr[g] = float(np.abs(z).max())
+    valid_genes = {g for g in pert_genes if snr.get(g, 0.0) >= RNA_SNR_MIN}
+    print(f"rna_snr>={RNA_SNR_MIN} validity filter: {len(valid_genes)}/{len(pert_genes)} genes pass")
+
     # ---- 1. index CSVs -------------------------------------------------------
     sel = (m["cell_type"] == "Hep") & (m["decision"].isin(KEEP_DECISIONS))
+    # perturbation-validity gate: keep controls always; keep treated only if rna_snr passes.
+    sel = sel & (m["is_control"] | m["target_gene"].astype(str).isin(valid_genes))
     s = m.loc[sel].copy()
     s["SAMPLE_KEY"] = s["cell_id"].astype(str)
     s["CPD_NAME"] = s["target_gene"].astype(str)
@@ -119,28 +150,7 @@ def main():
                            genes=LEAD_GENES)
     print(f"index_eval_leadgenes.csv: {len(lead_idx)} rows; lead genes {LEAD_GENES}")
 
-    # ---- 2. per-gene RNA effect-size (SNR) for the diagnostic effects table ---
-    #        Diagnostic only. The 209-gene MERFISH is a READOUT, never a condition;
-    #        the perturbation condition is gene IDENTITY (embedding_gene_identity.csv).
-    rna = ad.read_h5ad(RNA_H5AD, backed="r")
-    Xr = rna.X
-    train_m = m[m["split"] == "train"]
-    ctrl_rows = train_m.loc[train_m["is_control"], "rna_index"].to_numpy()
-    ctrl = _dense_cols(Xr, ctrl_rows)
-    ctrl_mean = ctrl.mean(axis=0)
-    ctrl_std = ctrl.std(axis=0) + 1e-6
-    print(f"RNA: {rna.shape}  control train cells={len(ctrl_rows)}")
-
-    snr = {}
-    for g in pert_genes:
-        idx = train_m.loc[train_m["target_gene"] == g, "rna_index"].to_numpy()
-        if len(idx) < MIN_CELLS:
-            idx = m.loc[m["target_gene"] == g, "rna_index"].to_numpy()
-        if len(idx) == 0:
-            snr[g] = 0.0
-            continue
-        z = (_dense_cols(Xr, idx).mean(axis=0) - ctrl_mean) / ctrl_std
-        snr[g] = float(np.abs(z).max())
+    # ---- 2. (RNA SNR + control stats already computed up front in step 0) ----
 
     # ---- 3. morphological effect size from 18ch protein (diagnostic) ---------
     prot = ad.read_h5ad(PROT_H5AD, backed="r")

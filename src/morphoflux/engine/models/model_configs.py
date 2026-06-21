@@ -149,6 +149,30 @@ MODEL_CONFIGS = {
         "with_fourier_features": False,
         "condition_dim": 204,
     },
+    "perturbmulti_idsig": {
+        # Same UNet as perturbmulti_id, but the condition is the RNA-signature CONCAT:
+        # one-hot gene identity (204) + scale-balanced 209-dim MERFISH RNA signature = 413.
+        # Kept as a SEPARATE arch so perturbmulti_id (one-hot, condition_dim 204) is unaffected.
+        "in_channels": 3,
+        "model_channels": 128,
+        "out_channels": 3,
+        "num_res_blocks": 4,
+        "attention_resolutions": [4],
+        "dropout": 0.3,
+        "channel_mult": [2, 2, 2],
+        "conv_resample": False,
+        "dims": 2,
+        "num_classes": None,
+        "use_checkpoint": False,
+        "num_heads": 1,
+        "num_head_channels": -1,
+        "num_heads_upsample": -1,
+        "use_scale_shift_norm": True,
+        "resblock_updown": False,
+        "use_new_attention_order": True,
+        "with_fourier_features": False,
+        "condition_dim": 413,
+    },
     "diet_id": {
         # Same UNet as perturbmulti_id; condition is the diet state (adlib/fasted/hfd),
         # a 3-dim one-hot, so condition_dim = 3.

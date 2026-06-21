@@ -11,44 +11,46 @@ from pathlib import Path
 PERTURBMULTI_CHANNELS = [5, 9, 10]
 
 
-def _load_perturbmulti(image_path, sample_key):
+def _load_perturbmulti(image_path, sample_key, channels=None):
     """Load a Perturb-Multi cell crop: npz['x'] (18,H,W) float[0,1] -> selected
-    channels in [-1, 1], already channel-first so no permute/255 transform."""
-    arr = np.load(Path(image_path) / f"{sample_key}.npz")["x"][PERTURBMULTI_CHANNELS]
+    channels in [-1, 1], already channel-first so no permute/255 transform.
+    `channels` (npz indices) is per-config; falls back to PERTURBMULTI_CHANNELS."""
+    channels = channels if channels is not None else PERTURBMULTI_CHANNELS
+    arr = np.load(Path(image_path) / f"{sample_key}.npz")["x"][channels]
     img = torch.from_numpy(np.ascontiguousarray(arr)).float()
     return img * 2.0 - 1.0  # [0,1] -> [-1,1]
 
 
 class CustomTransform:
     """Class for scaling and resizing an input image, with optional augmentation and normalization."""
-    
+
     def __init__(self, augment=False, normalize=False, dim=0):
         """
         Initialize the CustomTransform instance.
-        
+
         Args:
             augment (bool, optional): Whether to apply augmentation (random flips). Defaults to False.
             normalize (bool, optional): Whether to normalize the image. Defaults to False.
             dim (int, optional): Dimension along which the normalization is applied. Defaults to 0.
         """
-        self.augment = augment 
-        self.normalize = normalize 
+        self.augment = augment
+        self.normalize = normalize
         self.dim = dim
-        
+
     def __call__(self, X):
         """
         Apply the transformations to the input image.
-        
+
         Args:
             X (torch.Tensor): Input image tensor.
-            
+
         Returns:
             torch.Tensor: Transformed image tensor.
         """
         # Add random noise and rescale pixels between 0 and 1
         random_noise = torch.rand_like(X)  # Generate random noise
         X = (X + random_noise) / 255.0  # Scale to 0-1 range
-        
+
         t = []
         # Normalize the input to the range [-1, 1]
         if self.normalize:
@@ -56,7 +58,7 @@ class CustomTransform:
             mean = [0.5] * num_channels
             std = [0.5] * num_channels
             t.append(T.Normalize(mean=mean, std=std))
-        
+
         # Perform augmentation steps
         if self.augment:
             t.append(T.RandomHorizontalFlip(p=0.3))
@@ -65,10 +67,10 @@ class CustomTransform:
         trans = T.Compose(t)
         return trans(X)
 
-def read_files_pert(file_names, mols, mol2id, y2id, dose, y, transform, image_path, dataset_name, idx, multimodal, batch, iter_ctrl):
+def read_files_pert(file_names, mols, mol2id, y2id, dose, y, transform, image_path, dataset_name, idx, multimodal, batch, iter_ctrl, channels=None):
     """
     Read and process control and treated batch images.
-    
+
     Args:
         file_names (dict): Dictionary containing file names for 'ctrl' and 'trt' samples.
         mols (dict): Dictionary containing molecule information for 'ctrl' and 'trt' samples.
@@ -81,18 +83,18 @@ def read_files_pert(file_names, mols, mol2id, y2id, dose, y, transform, image_pa
         dataset_name (str): Name of the dataset.
         idx (int): Index of the sample to retrieve.
         multimodal (bool): Whether the dataset is multimodal.
-    
+
     Returns:
         dict: Dictionary containing processed images, molecule information, annotation ID, dose, and file names.
     """
     if iter_ctrl:
-        # Sample control and treated batches 
+        # Sample control and treated batches
         img_file_ctrl = file_names["ctrl"][idx]
         idx_trt = np.random.randint(0, len(file_names["trt"]))
         img_file_trt = file_names["trt"][idx_trt]
         idx_ctrl = idx
-    
-    else: 
+
+    else:
         idx_trt = idx
         # Use idx to select trt image and random select a ctrl image from the same batch
         img_file_trt = file_names["trt"][idx_trt]
@@ -107,8 +109,8 @@ def read_files_pert(file_names, mols, mol2id, y2id, dose, y, transform, image_pa
 
     if dataset_name == "perturbmulti":
         # Direct npz load by cell_id; same-batch ctrl pairing already done above.
-        img_ctrl = _load_perturbmulti(image_path, img_file_ctrl)
-        img_trt = _load_perturbmulti(image_path, img_file_trt)
+        img_ctrl = _load_perturbmulti(image_path, img_file_ctrl, channels)
+        img_trt = _load_perturbmulti(image_path, img_file_trt, channels)
         # Range-safe flip augmentation. CustomTransform's noise/normalize path assumes
         # [0,255] inputs and is bypassed for perturbmulti, so apply flips directly to the
         # [-1,1] tensors when augmentation is on (train fold + augment_train). Flips do not
@@ -131,7 +133,7 @@ def read_files_pert(file_names, mols, mol2id, y2id, dose, y, transform, image_pa
     # Split files
     file_split_ctrl = img_file_ctrl.split('-')
     file_split_trt = img_file_trt.split('-')
-    
+
     if len(file_split_ctrl) > 1:
         file_split_ctrl = file_split_ctrl[1].split("_")
         file_split_trt = file_split_trt[1].split("_")
@@ -152,18 +154,18 @@ def read_files_pert(file_names, mols, mol2id, y2id, dose, y, transform, image_pa
             path_trt = Path(image_path) / file_split_trt[0] / f"{file_split_trt[1]}"
             file_ctrl = '_'.join(file_split_ctrl[2:]) + ".npy"
             file_trt = '_'.join(file_split_trt[2:]) + ".npy"
-        
+
     img_ctrl, img_trt = np.load(path_ctrl / file_ctrl), np.load(path_trt / file_trt)
     img_ctrl, img_trt = torch.from_numpy(img_ctrl).float(), torch.from_numpy(img_trt).float()
-    img_ctrl, img_trt = img_ctrl.permute(2, 0, 1), img_trt.permute(2, 0, 1)  # Place channel dimension in front of the others 
+    img_ctrl, img_trt = img_ctrl.permute(2, 0, 1), img_trt.permute(2, 0, 1)  # Place channel dimension in front of the others
     img_ctrl, img_trt = transform(img_ctrl), transform(img_trt)
-    
+
     if multimodal:
         y_mod = y["trt"][idx_trt]
         mol = mol2id[y_mod][mols["trt"][idx_trt]]
     else:
         mol = mol2id[mols["trt"][idx_trt]]
-    
+
     return {
         'X': (img_ctrl, img_trt),
         'mols': mol,
@@ -186,7 +188,7 @@ def read_files_pert(file_names, mols, mol2id, y2id, dose, y, transform, image_pa
 def read_files_batch(file_names, mols, mol2id, y2id, y, transform, image_path, dataset_name, idx):
     """
     Read and process batch images.
-    
+
     Args:
         file_names (list): List of file names for the samples.
         mols (list): List of molecule information for the samples.
@@ -197,13 +199,13 @@ def read_files_batch(file_names, mols, mol2id, y2id, y, transform, image_path, d
         image_path (str): Path to the image folder.
         dataset_name (str): Name of the dataset.
         idx (int): Index of the sample to retrieve.
-    
+
     Returns:
         dict: Dictionary containing processed image, molecule information, annotation ID, and file name.
     """
     img_file = file_names[idx]
     file_split = img_file.split('-')
-    
+
     if dataset_name == "rxrx1":
         file_split = file_split[1].split("_")
         path = Path(image_path) / "_".join(file_split[:2]) / file_split[2]
@@ -216,14 +218,14 @@ def read_files_batch(file_names, mols, mol2id, y2id, y, transform, image_path, d
         file_split = file_split[0].split("_")
         path = Path(image_path) / file_split[0] / f"{file_split[1]}_{file_split[2]}"
         file = '_'.join(file_split[1:]) + ".npy"
-        
+
     img = np.load(path / file)
     img = torch.from_numpy(img).float()
-    img = img.permute(2, 0, 1)  # Place channel dimension in front of the others 
+    img = img.permute(2, 0, 1)  # Place channel dimension in front of the others
     img = transform(img)
 
     mol = mol2id[mols[idx]]
-    
+
     return {
         'X': img,
         'mols': mol,
@@ -234,10 +236,10 @@ def read_files_batch(file_names, mols, mol2id, y2id, y, transform, image_path, d
 def convert_6ch_to_3ch(images):
     """
     Convert 6-channel images to 3-channel RGB composite images.
-    
+
     Args:
         images (torch.Tensor): Input tensor of shape (batch_size, 6, H, W), values in range [0, 1].
-        
+
     Returns:
         torch.Tensor: Output tensor of shape (batch_size, 3, H, W), values in range [0, 1].
     """
@@ -251,23 +253,23 @@ def convert_6ch_to_3ch(images):
         [0.5, 0, 0.5],  # Channel 5 -> Magenta (lower intensity)
         [0.5, 0.5, 0],  # Channel 6 -> Yellow (lower intensity)
     ], dtype=images.dtype, device=images.device)
-    
+
     # Perform matrix multiplication to combine channels
     # Shape transformation: (batch_size, 6, H, W) -> (batch_size, 3, H, W)
     images_rgb = torch.einsum('bchw,cn->bnhw', images, weights)
-    
+
     # Clip the result to ensure it's within [0, 1]
     images_rgb = torch.clamp(images_rgb, -1, 1)
-    
+
     return images_rgb
 
 def convert_5ch_to_3ch(images):
     """
     Convert 5-channel images to 3-channel RGB composite images.
-    
+
     Args:
         images (torch.Tensor): Input tensor of shape (batch_size, 5, H, W), values in range [0, 1] or [-1, 1].
-    
+
     Returns:
         torch.Tensor: Output tensor of shape (batch_size, 3, H, W), values in range [0, 1].
     """

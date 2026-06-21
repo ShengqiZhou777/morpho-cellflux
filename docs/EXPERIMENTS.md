@@ -6,6 +6,11 @@ perturbation semantics.
 
 Dates: 2026-06-17 to 2026-06-19.
 
+> **Current state is the "2026-06-19 (session 2)" section at the bottom.** It supersedes the
+> image-panel, index-size, active-runs, and genome-wide Perturb-seq statements above wherever
+> they conflict (channels are now per-dataset & config-driven; `index_train` is rna_snr-filtered
+> to 76 genes; GSE275483 is unusable for signatures).
+
 ## Modality Flow (Pinned)
 
 Per the Perturb-Multi design, **perturbation = sgRNA -> target gene identity**.
@@ -42,7 +47,7 @@ is the paper's "no confident guide called" QC bucket (guide called only at >3 mo
 cell); it carries no decision tier, so it never enters the training indices. Only the
 **163 quality-passing genes** actually appear as training conditions; the `control` and
 `__null__` columns are always-zero padding that fix `condition_dim = 204`.
-| Genome-wide Perturb-seq pseudobulk | independent rich condition | TBD | GSE275483 | pending |
+| Genome-wide Perturb-seq pseudobulk | independent rich condition | — | GSE275483 | **UNUSABLE** (see session 2: no per-cell guide calls in the deposited h5) |
 | 209-gene MERFISH RNA | transcriptional readout/phenotype | 209 | RNA h5ad / derived tables | evaluation/analysis only |
 
 ## Active Setup
@@ -81,20 +86,16 @@ channel panel and lead-gene picks) but no longer gate the training set.
 
 ## Active Runs
 
-> These runs predate the 2026-06-19 index consolidation and were trained on the legacy
-> gene-subset indices (`index_stronghits` / `index_highsignal` / `index_panel_signal`,
-> now removed). New runs train on `index_train.csv` (all 163 genes). The checkpoints
-> remain valid; only the index files were renamed/merged.
+> Superseded by the runs table in "2026-06-19 (session 2)". The dead/superseded runs below
+> were trimmed on 2026-06-19 (heavy `.pth`/`fid_samples` deleted; `args.json`/`log.txt`/eval
+> summaries kept as records). The `v6_interp*` qualitative outputs (old panel) were removed.
 
-| run | condition | index | status |
+| run | condition | panel | status |
 |---|---|---|---|
-| `cellflux_pm_geneid_baseline_v6` | gene identity | `index_stronghits.csv` | active clean baseline |
-| `cellflux_pm_highsignal_id_v1` | gene identity | `index_highsignal.csv` | active clean follow-up |
-| `cellflux_pm_panel_signal_id_v1` | gene identity | `index_panel_signal.csv` | active clean follow-up |
-| `v6_interp` | gene identity, resume from v6 | `index_interp_leadgenes.csv` | active interpolation output |
-| `v6_interp_cfg3` | gene identity, resume from v6, CFG 3.0 | `index_interp_leadgenes.csv` | active interpolation output |
-| `v6_interp_cfg6` | gene identity, resume from v6, CFG 6.0 | `index_interp_leadgenes.csv` | active interpolation output |
-| `v6_interp_noiseinit` | gene identity, resume from v6, noise init | `index_interp_leadgenes.csv` | active interpolation output |
+| `cellflux_pm_geneid_baseline_v6` | gene identity | `[5,9,10]` | kept — clean old-panel baseline |
+| `cellflux_pm_highsignal_id_v1` | gene identity | `[5,9,10]` | DEAD (mode collapse, FID 143–169); trimmed |
+| `cellflux_pm_panel_signal_id_v1` | gene identity | `[5,9,10]` | superseded (stopped ep8); trimmed |
+| `v6_interp*` (4 variants) | gene identity, resume from v6 | `[5,9,10]` | removed (old-panel interpolation outputs) |
 
 ## Removed Runs
 
@@ -184,3 +185,257 @@ Perilipin/lipid for HFD) before any visual-interpolation claim.
   summary and correlations.
 - `scripts/analyze_perilipin_direction.py`: Perilipin direction analysis.
 - `scripts/train.sh`: parameterized DDP launch with persistent logging.
+
+---
+
+## 2026-06-19 (session 2)
+
+Diagnosed *why* per-gene recovery was weak (channels + metric + conditioning, not "model
+broken"), made the image panel per-dataset, added a perturbation-validity training filter,
+upgraded evaluation to a baseline-relative population metric, and scoped the conditioning &
+figure strategy. New runs `diet_id_v3` and `cellflux_pm_train_id_v8` launched.
+
+### Per-dataset image channels (was a fixed `[5,9,10]` for both)
+An 18-channel effect scan (protein ground-truth + image-space, both per-gene z vs control)
+showed the best channels are *opposite* per dataset. Channels are now **config-driven**: a
+`channels:` field in `configs/*.yaml` → `args.channels` → threaded through
+`dataloader.CellDatasetFold` → `data_utils._load_perturbmulti` (defaults to `[5,9,10]` when
+absent). 3-channel panels need **no model change**.
+
+| dataset | new panel (npz idx) | markers | why |
+|---|---|---|---|
+| CRISPR (`perturbmulti_train_id`) | `[0,14,5]` | Alb / Rab7 / Perilipin | broadest per-gene image responders; dropped narrow `Calreticulin` (moves for only 1 gene, Sel1l) |
+| diet (`diet_id_v3`) | `[9,5,8]` | Calreticulin / Perilipin / TOMM20 | Calreticulin is the *strongest* diet channel (hfd z=1.0); dropped weak `pS6RP` (diet z=0.28) |
+
+Note: `Calreticulin` is worst-for-CRISPR but best-for-diet — fixed shared panels were
+suboptimal for both. `Gapdh` tops max\|z\| but is a housekeeping/abundance artifact (excluded).
+
+### Training-index filter: `rna_snr` (163 → 76 genes)
+`build_perturbmulti_data.py` now gates `index_train` by `RNA_SNR_MIN=0.3` — drop treated
+genes whose sgRNA did not move the transcriptome (max\|z\| over the 209-gene RNA < 0.3).
+Legit preprocessing: filters on **perturbation validity (RNA knockdown)**, never on the
+morphology readout being scored. `condition_dim` stays **204** — it is the one-hot *width*
+(`embedding_matrix.loc[mol_names]`), invariant to which gene subset trains. Old index saved
+as `index_train_pre_rnasnr_163genes.csv`.
+
+### Evaluation upgrades (`scripts/aggregate_eval.py`)
+- **Channel-aware**: reads `channels` from the run's `args.json` (default `[5,9,10]`), maps
+  PNG channel k → npz `channels[k]` via a canonical 18-name table. Back-compatible with v6/v7.
+- **Population metric + copy-control baseline**: per channel,
+  `gap_closed = 1 − W(gen,tgt)/W(src,tgt)` (1-D Wasserstein; + energy distance) = fraction of
+  the control→target distribution gap the model closes (1=perfect, 0=no better than copying
+  the control, <0=worse). Diet is computed **per condition** (replaces the degenerate
+  Pearson=1.0 from only 2 treated conditions).
+- **Disclosed subset** (CRISPR): reports headline metrics on the `rna_snr≥THR` subset AND the
+  full set AND a hit/non-hit split. On v7 the subset lifted Perilipin Pearson 0.24→0.41.
+- **FID caveat reaffirmed (now with evidence)**: under control-init, FID is *anti-correlated*
+  with biology — diet_v1 FID rose 24.9→61.6 while gap_closed (hfd) climbed to its peak at
+  **epoch 9** (Perilipin 0.30→0.82). Pick checkpoints by `gap_closed`, never FID.
+
+### Runs
+| run | panel | index | condition | status |
+|---|---|---|---|---|
+| `cellflux_pm_train_id_v7` | `[5,9,10]` | 163-gene | one-hot 204 | stopped (converged; old-panel CRISPR baseline; `checkpoint-9`) |
+| `diet_id_v1` | `[5,9,10]` | diet | diet one-hot 3 | baseline (peak gap_closed ≈ ep9; `checkpoint-1`=best FID) |
+| `diet_id_v3` | `[9,5,8]` | diet | diet one-hot 3 | **running** (flip aug; 12 ep / eval@2) |
+| `cellflux_pm_train_id_v8` | `[0,14,5]` | **76-gene** rna_snr | one-hot 204 | **queued** after diet_v3 (20 ep / eval@5) |
+
+Launched detached via `scripts/run_new_panels.sh` (setsid; diet_v3 → v8 sequential, 2 GPUs).
+**Early diet_v3 vs diet_v1 (same epochs, same metric)**: the `pS6RP→TOMM20` swap turned a
+*negative* gap_closed (−0.06…−0.74, worse than copy-control) into *positive* (+0.33…+0.60),
+and FID is lower (ep1 15.0 vs 24.9) — first real model-level confirmation the per-dataset
+panel helps.
+
+### Genome-wide Perturb-seq (GSE275483): UNUSABLE for signatures
+The deposited `GSE275483_RAW.tar` is **expression-only** (35 × 10x Flex h5, 19,059-gene mouse
+transcriptome, **0 guide features**). The sgRNAs were captured by custom split probes and
+perturbations called by the authors, but those calls are **not in the deposited matrices** and
+GEO has no separate guide-call file. Without per-cell guide→gene labels we cannot group cells
+by perturbation → cannot build per-gene signatures. Confirmed unrecoverable from available data
+(authors not reachable). Not pursued.
+
+### Next: richer conditioning from the IMAGING-arm RNA (replaces one-hot)
+The imaging cells DO carry decoded guide labels: `RNA_crispr_hep_paired.h5ad`
+(`obs['singlet_gene']`, 203 genes + `control`, 74k cells × 209 MERFISH genes). Build a
+**per-gene 209-dim transcriptional signature** S(g) = mean expression of cells with gene g,
+z-scored vs control (`perturbations.mean_expr_by_bc` + `normalize_by_controls`) →
+`embedding_gene_rnasig.csv` (203×209; all 76 training genes covered; control row = 0). This is
+**non-leaky** (gene-level average, not the cell's own RNA — the v2–v5 leak) and richer than
+one-hot (similar-pathway genes share). **Self-check: structure is real but weak/uneven** —
+ribosomal within-group corr +0.155 and UPR +0.097 vs 0.068 baseline, but mTOR +0.033 and
+lipid +0.065 (≈noise). So weak-signature genes need an identity backbone.
+
+**Planned condition = `concat[ one-hot(204) ; scale-balanced sig(209) ] = 413`**, `condition_dim
+413`. Injection verified (`unet.py:702`): condition → single `mol_embed_transform` Linear →
+**added to the time embedding** → FiLM into every block (despite the "concat_conditioning"
+name, it is *not* concatenated to the image — that line is commented out). Must scale-balance
+the signature block (z-score norm ≈√209 ≫ one-hot norm 1) so neither dominates; scaling to mean
+row-norm ≈1 also makes the signature contribute proportional to effect strength. (Pure-signature
+arm = clean ablation.)
+
+### Figure strategy (CellFlux-style trajectory) — the unpaired truth
+The control→perturbed data is **unpaired / one-to-many**: there is no true target image for a
+given control (in `interpolate.sh` the shown "Real Trt" is a *random* same-batch treated cell).
+CellFlux-style figures look clean because of (1) strong, recognizable population-level effects,
+(2) structure-preserving counterfactual ODE (keeps cell identity, shifts only perturbation
+features), and (3) curation — not paired prediction. Figure quality ≈ effect / cell-to-cell
+variance: large for diet-hfd & chemical, ≪1 for single-gene CRISPR (its morph is swamped by
+cell variation). **Honest figure plan**: lead with **diet adlib→hfd** (counterfactual control →
+trajectory → generated, with a *montage of real perturbed cells* as the phenotype population —
+not one "target", plus the responsive channel e.g. Perilipin). For CRISPR, use
+distribution-level panels, not single-cell morphs. `scripts/interpolate.sh` produces the
+trajectory grid (`--edm_schedule` + `nfe` needed for intermediate frames); a small post-hoc
+layout script can match the paper's boxes/arrows/legend aesthetic.
+
+### Artifacts / cleanup (2026-06-19)
+- New: `configs/diet_id_v3.yaml`, `configs/perturbmulti_train_idsig.yaml`,
+  `scripts/run_new_panels.sh`, `scripts/run_idsig.sh`, `scripts/idsig_watcher.sh`,
+  `data/processed/perturbmulti/embedding_gene_rnasig.csv` (203×209 per-gene RNA signature),
+  `data/processed/perturbmulti/embedding_gene_idsig.csv` (concat-413 = one-hot ⊕ scaled sig),
+  `data/processed/perturbmulti/index_train_pre_rnasnr_163genes.csv` (backup).
+- Edited: `aggregate_eval.py`, `data_utils.py`, `dataloader.py`, `build_perturbmulti_data.py`,
+  `configs/perturbmulti_train_id.yaml`, `model_configs.py` (added a SEPARATE arch
+  `perturbmulti_idsig`, condition_dim 413 — `perturbmulti_id` stays 204 so v8 is unaffected),
+  `train.py` (dataset whitelist += `perturbmulti_idsig`).
+- RNA-signature conditioning is PREPARED + CPU-verified (embedding loads 413-dim, all 76 genes
+  found, `mol_embed_transform` Linear(413→512), forward OK). It runs as **v9**
+  (`outputs/cellflux_pm_train_id_v9`) — the apples-to-apples counterpart of one-hot v8 (same
+  channels + 76-gene index, only the condition differs). **Auto-chained**: `idsig_watcher.sh`
+  (detached) waits for the launcher's `ALL DONE`, then runs `run_idsig.sh`, so the full queue is
+  diet-v3 → v8 → v9 hands-off. Compare `gap_closed`: v8 (one-hot) vs v9 (one-hot + RNA signature).
+- `outputs/` trimmed 25G→17G: dead runs (`highsignal_id_v1`, `panel_signal_id_v1`) reduced to
+  their KB records; `v6_interp*` and stale stray logs / the killed old-channel diet-v2 watcher
+  removed. Baselines (`v6`, `v7`, `diet_v1`) and the active `diet_v3` kept.
+
+---
+
+## 2026-06-20 (session 3): pipeline complete, final results, v9 negative, cleanup
+
+The `diet-v3 → v8 → v9` queue finished hands-off overnight (all exit 0; diet-v3 ~21:26 prior,
+v8 21:26, v9 23:07). **Paper-ready numbers are curated in `docs/RESULTS.md`** with full
+provenance; this section is the experiment-report record (incl. the not-so-good runs) before
+artifact cleanup.
+
+### Final selected results (selected by `gap_closed`, not FID)
+- **diet-v3** (`[9,5,8]`, diet one-hot, 12 ep): balanced best **epoch 9** — fasted
+  {Calret 0.86, Peri 0.40, TOMM20 0.40}, hfd {0.88, 0.62, 0.36}. **HFD continues climbing to
+  epoch 11** {Calret 0.91, Peri 0.85, TOMM20 0.81} but **fasted overshoots after ep9**
+  (Peri 0.40→0.01). ep11 HFD-peak summary saved as
+  `diet_id_v3/aggregate_eval_summary_hfdpeak_ep11.json`; canonical on-disk summary = ep9.
+  This is the **headline** result (strong physiological effect; HFD-led trajectory figure).
+- **v8** CRISPR one-hot (`[0,14,5]`, 76-gene rna_snr, 20 ep): best **epoch 19**, FID 16.3.
+  pooled gap_closed Alb +0.18 / Rab7 +0.15 (beat copy-control) / Peri −0.14; direction
+  recovery Alb dir_corr 0.68 sign_agree 0.74, Rab7 0.61/0.74, Peri pearson 0.50. The clean
+  "gene identity → morphology" result.
+
+### Negative result — v9 (RNA-signature conditioning, concat-413) did NOT help
+Apples-to-apples vs v8 (same channels + 76-gene index; only condition differs: one-hot ⊕
+scaled per-gene RNA signature). 20 ep, FID ~16 throughout (identical to v8 — **FID blind**).
+
+| pooled gap_closed | epoch 9 | epoch 14 | epoch 19 |
+|---|---:|---:|---:|
+| Alb  — v8 / v9 | −0.04 / **−0.78** | −0.12 / **−1.76** | **+0.18** / **−0.99** |
+| Rab7 — v8 / v9 | −0.27 / **−0.75** | +0.01 / **−0.86** | **+0.15** / **−1.39** |
+| Peri — v8 / v9 | +0.15 / +0.22 | −0.04 / +0.18 | −0.14 / **+0.32** |
+
+v9 is **systematically worse on Alb & Rab7 at every epoch** (W(gen,tgt) 2–4× v8's), only
+winning on Perilipin (pearson 0.51 vs 0.50). Conclusion: the gene-level transcriptional
+signature did not improve — and degraded — morphology-shift recovery vs plain one-hot.
+Reportable as a clean ablation. Caveat: per-run W(src,tgt) baselines differ slightly
+(sample subsets not pairwise identical), but the 2–4× absolute gap far exceeds that noise.
+
+### Final runs table
+| run | panel | index | condition | best ckpt | status |
+|---|---|---|---|---|---|
+| `diet_id_v3` | `[9,5,8]` | diet | diet one-hot 3 | ep9 (bal) / ep11 (hfd) | **KEEP — headline** |
+| `cellflux_pm_train_id_v8` | `[0,14,5]` | 76-gene | one-hot 204 | ep19 | **KEEP — CRISPR result** |
+| `cellflux_pm_train_id_v9` | `[0,14,5]` | 76-gene | idsig 413 | ep19 | negative ablation (trim heavy) |
+| `cellflux_pm_train_id_v7` | `[5,9,10]` | 163-gene | one-hot 204 | ep9 | superseded by v8 (trim heavy) |
+| `diet_id_v1` | `[5,9,10]` | diet | diet one-hot 3 | ep1 | superseded by diet-v3 (trim heavy) |
+| `cellflux_pm_geneid_baseline_v6` | `[5,9,10]` | — | gene identity | — | old-panel baseline (trim heavy) |
+
+### Cleanup (session 3, executed 2026-06-20)
+Records kept for every run (`args.json`, `log.txt`, `aggregate_eval_*`, `snapshots/`,
+figures, **and `fid_samples/`** so any epoch's `gap_closed` stays re-derivable without
+retraining). For the four superseded/negative runs, kept **one** checkpoint each and deleted
+the rest of the `.pth`:
+- `cellflux_pm_train_id_v9` → keep `checkpoint-19.pth` (negative-ablation reference)
+- `cellflux_pm_train_id_v7` → keep `checkpoint-19.pth`
+- `diet_id_v1` → keep `checkpoint-9.pth` (biology peak / interpolation ckpt; NOT the best-FID
+  ep1, since FID is not the selection metric here)
+- `cellflux_pm_geneid_baseline_v6` → keep `checkpoint-19.pth` (delta_scatter figure epoch)
+
+Keepers `diet_id_v3` and `cellflux_pm_train_id_v8` untouched (all checkpoints retained).
+`diet_id_v3` also keeps `aggregate_eval_summary_hfdpeak_ep11.json` (HFD-peak) alongside the
+ep9 canonical summary. **`outputs/` 28G → 14G.**
+
+## 2026-06-20 (session 4): CellFlux-faithful evaluation + baselines + the FID reality check
+
+**Why this session.** Sessions 1–3 selected/reported on `gap_closed` (a home-grown per-cell
+channel-mean Wasserstein metric). To position the paper against the field (it adapts the
+CellFlux paradigm to a new in-vivo dataset), evaluation must follow CellFlux
+(arXiv:2502.09775) and compare every method under the *same* metrics and *same* sample budget.
+Spec pinned in **`docs/EVAL_PROTOCOL.md`** (single source of truth).
+
+### Protocol (from the CellFlux paper)
+- Metrics: **FIDo / FIDc** (overall + per-condition-averaged), **KIDo / KIDc**, and **MoA
+  classification acc / macro-F1 / weighted-F1** (classifier trained on REAL perturbed, tested
+  on GENERATED). CellFlux selects on validation FID; we additionally report `gap_closed`.
+- **Matched N is the comparability rule** (CellFlux Table 5: FID/KID are sample-size sensitive).
+  N = 5000 (BBBC021 budget); diet ≈ BBBC021 (few strong classes), CRISPR ≈ RxRx1 (many weak).
+- All methods read/write the shared `imagefolder/<condition>/*.png` layout.
+
+### Tooling built this session
+- **`baselines/compute_image_metrics.py`** — FIDo/FIDc/KIDo/KIDc from imagefolders, matched
+  per-condition cap, used identically for every method (errors if a folder lacks the cap).
+- **MoA classifier fix** (`src/morphoflux/engine/moa/train_moa.py`) — vendored code classified
+  `batch['y_id']` = **ANNOT (treated/control), a trivial 2-way label** (smoke test: all 1s).
+  Fixed to `batch['mols']` = perturbation class; `num_classes = len(mol2id)`. Also removed a
+  hardcoded `/pasteur2/...` path and rewrote `evaluate_generated_image` to be **imagefolder-
+  driven** (was test-loader driven → assumed one generation per test cell, incompatible with
+  matched-N subsampling). For diet, `mol2id = {fasted, hfd}` (adlib is control) → MoA = 2-class.
+- **`baselines/build_comparison_table.py`** — runs both tools per method at matched N, emits the
+  CellFlux-style comparison table (md + tsv).
+
+### MoA real-image ceiling (diet)
+Classifier (frozen InceptionV3 + linear head, 3 epochs) on REAL treated images:
+**76.5% acc** (fasted 88.8% / hfd 63.5%; chance 50%) → conditions ARE separable on real images
+→ **MoA is a usable metric for diet.** CRISPR ceiling expected ≈ chance (77-way, subtle); to be
+measured before reporting MoA for CRISPR.
+
+### Diet comparison table (PREVIEW, per-condition cap=500, proposed ep9 @ cfg0.2)
+| method | FIDo | FIDc | MoA-Acc | hfd-recall |
+|---|---:|---:|---:|---:|
+| copy_control | **17.09** | 26.33 | 48.2 (chance) | 7.8% |
+| phendiff | 19.41 | 27.63 | **59.2** | 33.6% |
+| proposed_ep9 | 35.54 | 45.36 | 55.1 | 22.2% |
+
+**Reality check (verified NOT a normalization artifact — identical [0,1]×255 scale):**
+under the CellFlux-standard metrics the proposed method **does not win on diet** — copy-control
+has the best FID; PhenDiff the best MoA. Root cause from pixel means: real-treated ≈ **11.3**,
+control/copy ≈ 6.7, **proposed (cfg0.2) ≈ 6.6** = sits on the control distribution (still
+copy-source) + synthetic artifacts. The home-grown `gap_closed` (0.86) flattered the method;
+the standard metrics expose it. This is exactly why the CellFlux protocol was adopted.
+
+### The CFG lever (under-guidance hypothesis)
+Diet sampled at **cfg_scale = 0.2** (CellFlux uses 1.2) → under-guided, output glued to the
+control init. Resampling ep9 at **cfg = 1.5** moves generated brightness **6.6 → 8.6 (fasted) /
+7.7 (hfd)**, i.e. ~40% of the way toward treated (11.3). Promising; full FID/MoA at the higher
+cfg pending. Caveat (session-3 note): under use_initial=2, cfg 1.5 once blew FID to 236
+(over-guidance / out-of-regime) — watch for a cfg↑ → MoA↑ but FID↑ tradeoff.
+> Data-integrity note: `outputs/diet_id_v3/args.json` is STALE (`fid_samples=12, nfe=12` from a
+> later short resample). The real diet gen config is in `train_stdout.log`:
+> `use_initial=1, cfg_scale=0.2, ode step_size=0.02`. Use that for any regeneration.
+
+### Baseline status
+- copy-control: diet ✓ + crispr ✓ (biological null)
+- PhenDiff: diet ✓ (17825 samples) · crispr ⏳ training (~7h, per-epoch eval generation)
+- IMPA: launching (diet first) — the 2nd control-aware baseline CellFlux pairs with PhenDiff
+- StarGAN / MorphoDiff: vendored, not run
+
+### Paper strategy (mirror CellFlux)
+Need ≥2 external baselines (currently 1 usable → run IMPA). Lead with **diet** (BBBC021-analog,
+strong, MoA works); **CRISPR** as the harder genetic secondary (RxRx1-analog, distribution-level
+only). Two viable framings depending on whether cfg-tuned proposed becomes competitive:
+**(A)** method paper (proposed beats PhenDiff/IMPA on FIDc/MoA) or **(B)** new in-vivo benchmark
++ honest evaluation study (standard FID misleads on subtle perturbations; copy-control wins FID).

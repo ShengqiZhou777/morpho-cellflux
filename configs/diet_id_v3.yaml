@@ -1,0 +1,35 @@
+# Diet v3: same data/condition as diet_id (adlib/fasted/hfd), flip augmentation ON (as v2),
+# but with the DIET-optimized image panel.
+# Image panel = channels [9,5,8] = Calreticulin / Perilipin / TOMM20: the strongest diet
+# (fasted/hfd vs adlib) responders from the 18-channel effect scan -- Calreticulin hfd z=1.00
+# (UPR/ER-stress), Perilipin z=0.72 (lipid), TOMM20 z=0.55 (mitochondria). Replaces the legacy
+# [5,9,10] panel's weak pS6RP (diet z=0.28) with TOMM20. (Channel choice is per-dataset: the
+# CRISPR panel [0,14,5] is different because the best channels differ by perturbation type.)
+# normalize stays False (CustomTransform's [0,255] noise/normalize path is bypassed for
+# perturbmulti and would corrupt the [-1,1] tensors).
+# Launch:
+#   OUT=outputs/diet_id_v3 CONFIG=diet_id_v3 DATASET=diet_id USE_INITIAL=1 CFG=0.2 \
+#     EPOCHS=12 EVAL_FREQ=2 NPROC=2 BATCH=16 bash scripts/train.sh
+task_name: diet_id
+
+ood_set: Null
+mol_list: Null
+trainable_emb: False
+dataset_name: 'perturbmulti'
+n_channels: 3
+channels: [9, 5, 8]   # npz indices: Calreticulin(9), Perilipin(5), TOMM20(8)
+multimodal: False
+batch_correction: False
+batch_key: Null
+use_condition_embeddings: False
+add_controls: False
+condition_embedding_dimension: null
+modality_list:
+  - Gene
+
+image_path: data/raw/diet_extracted_images
+data_index_path: data/processed/diet/index_diet.csv
+embedding_path: data/processed/diet/embedding_diet.csv
+
+augment_train: True
+normalize: False

@@ -1,0 +1,27 @@
+# HFD-only interpolation config: same data/panel/embedding as diet_id_v3, but the data index
+# is filtered to test-split hfd (treated) + adlib (control pool) with hfd ordered FIRST, so the
+# single interpolation batch visualizes HFD trajectories (the strong steatosis condition).
+# Use only with scripts/interpolate.sh (--eval_only --interpolate). NOT for training.
+task_name: diet_id
+
+ood_set: Null
+mol_list: Null
+trainable_emb: False
+dataset_name: 'perturbmulti'
+n_channels: 3
+channels: [9, 5, 8]   # Calreticulin(9), Perilipin(5), TOMM20(8)
+multimodal: False
+batch_correction: False
+batch_key: Null
+use_condition_embeddings: False
+add_controls: False
+condition_embedding_dimension: null
+modality_list:
+  - Gene
+
+image_path: data/raw/diet_extracted_images
+data_index_path: data/processed/diet/index_diet_hfd_interp.csv
+embedding_path: data/processed/diet/embedding_diet.csv
+
+augment_train: False
+normalize: False

@@ -1,6 +1,7 @@
 import argparse
 from collections import defaultdict
 import os
+import json
 from pathlib import Path
 from types import SimpleNamespace
 import torch
@@ -10,8 +11,6 @@ from torchvision.models import inception_v3
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 import yaml
-import sys
-sys.path.append('/pasteur2/u/suyc/CellFlow/flow_matching/examples/image')
 from morphoflux.engine.training.dataloader import CellDataLoader_Eval
 import torchvision.transforms as T
 import numpy as np
@@ -103,7 +102,7 @@ def train_model(model, dataloader, criterion, optimizer, device, num_epochs=10, 
         for batch in tqdm(dataloader, desc=f"Epoch {epoch+1}/{num_epochs}"):
             x_real_ctrl, x_real_trt = batch['X']
             images = torch.clamp(x_real_trt * 0.5 + 0.5, min=0.0, max=1.0).to(device)
-            labels = batch['y_id'].to(device)
+            labels = batch['mols'].long().to(device)
             outputs = model(images)
             loss = criterion(outputs, labels)
 
@@ -133,7 +132,7 @@ def evaluate_model(model, dataloader, device, id2y):
         for batch in dataloader:
             x_real_ctrl, x_real_trt = batch['X']
             images = torch.clamp(x_real_trt * 0.5 + 0.5, min=0.0, max=1.0).to(device)
-            labels = batch['y_id'].to(device)
+            labels = batch['mols'].long().to(device)
             outputs = model(images)
             _, predicted = outputs.max(1)
 
@@ -152,7 +151,7 @@ def evaluate_model(model, dataloader, device, id2y):
                     class_correct[label] += 1
 
     print(f"Test Accuracy: {100. * correct / total:.2f}%")
-    
+
     macro_f1 = f1_score(all_labels, all_preds, average='macro')
     weighted_f1 = f1_score(all_labels, all_preds, average='weighted')
     print(f"Macro-F1 Score: {macro_f1:.4f}")
@@ -162,68 +161,69 @@ def evaluate_model(model, dataloader, device, id2y):
     for class_id in class_total:
         acc = 100. * class_correct[class_id] / class_total[class_id]
         print(f"Class {id2y[class_id]}: {acc:.2f}%, Total: {class_total[class_id]}")
-    
-def evaluate_generated_image(model, dataloader, device, img_root_path, id2mol, id2y):
+
+def evaluate_generated_image(model, img_root_path, device, mol2id, per_class_cap=None, seed=0, out_json=None):
+    """Classify GENERATED images laid out as <img_root_path>/<class>/*.png.
+
+    Imagefolder-driven (NOT test-loader driven): the true label is the folder/class, so it
+    works with any matched-N generated subset and never assumes one generation per test cell.
+    Mirrors baselines/compute_image_metrics.py's per-condition design so every method is scored
+    identically (same InceptionV3 classifier, same per-class cap).
+    """
     model.eval()
-    correct = 0
-    total = 0
-    class_correct = defaultdict(int)
-    class_total = defaultdict(int)
-    all_labels = []
-    all_preds = []
+    id2mol = {v: k for k, v in mol2id.items()}
+    rng = np.random.default_rng(seed)
+    root = Path(img_root_path)
+    classes = [c for c in mol2id if (root / c).is_dir()]
+    if not classes:
+        raise SystemExit(f"no class subdirs of {root} match mol2id {list(mol2id)}")
 
-    with torch.no_grad():
-        for batch in tqdm(dataloader, total=len(dataloader)):
-            x_real_ctrl, x_real_trt = batch['X']
-            y_trg = batch['mols']
-            idx_ctrl, idx_trt = batch['idx_ctrl'], batch['idx_trt']
-            img_file_ctrl, img_file_trt = batch['file_names']
-            labels = batch['y_id'].to(device)
-            target_classes = [id2mol[y.item()] for y in y_trg]
-            synthetic_samples = []
+    class_correct, class_total = defaultdict(int), defaultdict(int)
+    all_labels, all_preds = [], []
+    bs = 64
+    for cls in classes:
+        label = mol2id[cls]
+        files = sorted((root / cls).glob("*.png"))
+        if per_class_cap and len(files) > per_class_cap:
+            files = [files[i] for i in sorted(rng.permutation(len(files))[:per_class_cap])]
+        with torch.no_grad():
+            for i in range(0, len(files), bs):
+                imgs = torch.stack(
+                    [read_img_from_path(str(f)) for f in files[i : i + bs]]
+                ).to(device) / 255.0
+                preds = model(imgs).max(1)[1].cpu().numpy()
+                for p in preds:
+                    all_preds.append(int(p))
+                    all_labels.append(label)
+                    class_total[label] += 1
+                    class_correct[label] += int(int(p) == label)
 
-            for i in range(x_real_ctrl.shape[0]):
-                target_class = target_classes[i]
-                # synthetic_sample = read_img_from_path(os.path.join(img_root_path, target_class + f'/{idx_trt[i].item()}.png'))
-                synthetic_sample = read_img_from_path(os.path.join(img_root_path, target_class + f'/{img_file_trt[i]}.png'))
-                synthetic_samples.append(synthetic_sample)
-
-            synthetic_samples = torch.stack(synthetic_samples).to(device).float() / 255.0
-
-            outputs = model(synthetic_samples)
-            _, predicted = outputs.max(1)
-
-            total += labels.size(0)
-            correct += predicted.eq(labels).sum().item()
-
-
-            all_labels.extend(labels.cpu().numpy())
-            all_preds.extend(predicted.cpu().numpy())
-
-
-            for i in range(labels.size(0)):
-                label = labels[i].item()
-                pred = predicted[i].item()
-                class_total[label] += 1
-                if pred == label:
-                    class_correct[label] += 1
-
-            if total >= 5120:
-                break
-
+    acc = 100.0 * sum(p == l for p, l in zip(all_preds, all_labels)) / len(all_labels)
+    macro_f1 = float(f1_score(all_labels, all_preds, average="macro"))
+    weighted_f1 = float(f1_score(all_labels, all_preds, average="weighted"))
+    per_class = {
+        id2mol[c]: {"acc": 100.0 * class_correct[c] / class_total[c], "n": class_total[c]}
+        for c in class_total
+    }
     print(f"Test Generated Image from: {img_root_path}")
-    print(f"Overall Accuracy: {100. * correct / total:.2f}%")
+    print(f"Overall Accuracy: {acc:.2f}%  Macro-F1: {macro_f1:.4f}  Weighted-F1: {weighted_f1:.4f}")
+    print("Per-Class Accuracy:")
+    for name, d in per_class.items():
+        print(f"  Class {name}: {d['acc']:.2f}%, Total: {d['n']}")
+    result = {
+        "img_root_path": str(img_root_path),
+        "moa_acc": acc,
+        "macro_f1": macro_f1,
+        "weighted_f1": weighted_f1,
+        "per_class": per_class,
+        "n": len(all_labels),
+        "per_class_cap": per_class_cap,
+    }
+    if out_json:
+        Path(out_json).write_text(json.dumps(result, indent=2))
+        print(f"-> wrote {out_json}")
+    return result
 
-    macro_f1 = f1_score(all_labels, all_preds, average='macro')
-    weighted_f1 = f1_score(all_labels, all_preds, average='weighted')
-    print(f"Macro-F1 Score: {macro_f1:.4f}")
-    print(f"Weighted-F1 Score: {weighted_f1:.4f}")
-
-    print("\nPer-Class Accuracy:")
-    for class_id in class_total:
-        acc = 100. * class_correct[class_id] / class_total[class_id]
-        print(f"Class {id2y[class_id]}: {acc:.2f}%, Total: {class_total[class_id]}")
-    
 
 # Main function
 def main(args):
@@ -232,7 +232,7 @@ def main(args):
     datamodule = CellDataLoader_Eval(args)
     train_loader = datamodule.train_dataloader()
     test_loader = datamodule.test_dataloader()
-    num_classes = datamodule.num_y
+    num_classes = len(datamodule.mol2id)  # MoA analog = perturbation class (CPD_NAME), NOT ANNOT (treated/ctrl)
 
     model = MOAClassifier(num_classes=num_classes, device=device)
     criterion = nn.CrossEntropyLoss()
@@ -244,12 +244,13 @@ def main(args):
     id2mol = {v: k for k, v in datamodule.mol2id.items()}
     id2y = datamodule.id2y
     if args.mode == 'train':
-        train_model(model, train_loader, criterion, optimizer, device, num_epochs=10, save_path=args.ckpt_path)
+        train_model(model, train_loader, criterion, optimizer, device, num_epochs=args.epochs, save_path=args.ckpt_path)
 
-        evaluate_model(model, test_loader, device, id2y)
+        evaluate_model(model, test_loader, device, id2mol)
     elif args.mode == 'eval':
         assert args.img_root_path is not None, "Image root path is required for evaluation"
-        evaluate_generated_image(model, test_loader, device, args.img_root_path, id2mol, id2y)
+        evaluate_generated_image(model, args.img_root_path, device, datamodule.mol2id,
+                                 per_class_cap=args.gen_cap, seed=args.seed, out_json=args.out_json)
 
 
 def load_yaml_config(yaml_path):
@@ -262,11 +263,15 @@ if __name__ == "__main__":
     parser.add_argument('--img_root_path', type=str, default=None, help='Image root for results')
     parser.add_argument('--ckpt_path', type=str, default='checkpoint.pth', help='Model path')
     parser.add_argument('--mode', type=str, default='eval', help='Mode: eval or train')
+    parser.add_argument('--epochs', type=int, default=10, help='Training epochs for the MoA classifier')
     parser.add_argument('--config_path', type=str, default='../configs/bbbc021_all.yaml', help='Config path')
     parser.add_argument('--batch_size', type=int, default=32, help='Batch size')
     parser.add_argument('--iter_ctrl', type=bool, default=False, help='Iter ctrl')
     parser.add_argument('--pin_mem', type=bool, default=True, help='Pin mem')
     parser.add_argument('--num_workers', type=int, default=10, help='Number of workers')
+    parser.add_argument('--gen-cap', dest='gen_cap', type=int, default=None, help='Per-class cap on generated images (matched-N)')
+    parser.add_argument('--seed', type=int, default=0, help='Seed for subsampling generated images')
+    parser.add_argument('--out_json', type=str, default=None, help='Where to write the MoA result json')
     cli_args = parser.parse_args()
     yaml_config = load_yaml_config(cli_args.config_path)
     yaml_config.update(vars(cli_args))

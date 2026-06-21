@@ -16,6 +16,7 @@ dist/
 *.egg-info/
 
 logs/
+outputs/
 outputs/cellflux_*/
 outputs/v*_interp*/
 outputs/*.nohup
@@ -29,6 +30,8 @@ outputs/metrics/
 data/raw/*
 data/processed/*
 data/reports/*.json
+
+baselines/external/
 
 !data/raw/.gitkeep
 !data/processed/.gitkeep

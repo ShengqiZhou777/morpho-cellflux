@@ -12,14 +12,14 @@ class CellDataset:
     """
     Dataset class for cell image data.
 
-    This class handles the loading and preprocessing of cell image datasets, 
+    This class handles the loading and preprocessing of cell image datasets,
     including the initialization of dataset splits, normalization, and embedding creation.
     """
-    
+
     def __init__(self, args, device):
         """
         Initialize the CellDataset instance.
-        
+
         Args:
             args (argparse.Namespace): Arguments containing dataset configuration.
             device (torch.device): Device to load the data onto (e.g., 'cuda' or 'cpu').
@@ -38,6 +38,7 @@ class CellDataset:
         self.ood_set = args.ood_set  # List of out-of-distribution drugs
         self.trainable_emb = args.batch_correction  # Whether embeddings are trainable
         self.dataset_name = args.dataset_name  # Name of the dataset
+        self.channels = getattr(args, "channels", None)  # per-config npz channel panel (None -> default [5,9,10])
 
         self.batch_correction = args.batch_correction  # If True, perform batch correction
         self.multimodal = args.multimodal  # If True, handle multiple types of perturbations
@@ -52,45 +53,46 @@ class CellDataset:
             self.batch_key = args.batch_key  # Key for batch correction
 
         # Fix the training specifics
-        self.device = device 
+        self.device = device
 
         # Read the datasets
         self.fold_datasets = self._read_folds()
 
         self.y_names = np.unique(self.fold_datasets['train']["ANNOT"])  # Sorted annotation names
 
-        # Count the number of compounds 
+        # Count the number of compounds
         self._initialize_mol_names()
 
         self.y2id = {y: id for id, y in enumerate(self.y_names)}  # Map annotations to IDs
         self.n_y = len(self.y_names)  # Number of unique annotations
         self.iter_ctrl = args.iter_ctrl
-        # Initialize embeddings 
+        # Initialize embeddings
         self.initialize_embeddings()
 
         # Initialize the datasets
         self.fold_datasets = {
-            'train': CellDatasetFold('train', 
-                                     self.image_path, 
+            'train': CellDatasetFold('train',
+                                     self.image_path,
                                      self.fold_datasets['train'],
                                      self.mol2id,
-                                     self.y2id, 
-                                     self.augment_train, 
+                                     self.y2id,
+                                     self.augment_train,
                                      self.normalize,
                                      dataset_name=self.dataset_name,
-                                     add_controls=self.add_controls, 
+                                     add_controls=self.add_controls,
                                      batch_correction=self.batch_correction,
                                      batch_key=self.batch_key,
                                      multimodal=self.multimodal,
                                      cpd_name=self.cpd_name,
-                                     iter_ctrl=self.iter_ctrl),
-            
+                                     iter_ctrl=self.iter_ctrl,
+                                     channels=self.channels),
+
             'test': CellDatasetFold('test',
                                     self.image_path,
                                     self.fold_datasets['test'],
-                                    self.mol2id, 
-                                    self.y2id, 
-                                    self.augment_train, 
+                                    self.mol2id,
+                                    self.y2id,
+                                    self.augment_train,
                                     self.normalize,
                                     dataset_name=self.dataset_name,
                                     add_controls=self.add_controls,
@@ -98,19 +100,20 @@ class CellDataset:
                                     batch_key=self.batch_key,
                                     multimodal=self.multimodal,
                                     cpd_name=self.cpd_name,
-                                    iter_ctrl=False)}
+                                    iter_ctrl=False,
+                                    channels=self.channels)}
 
     def _read_folds(self):
         """
         Extract the filenames of images in the train and test sets.
-        
+
         Returns:
             dict: Dictionary containing train and test datasets.
         """
         # Read the index CSV file
         dataset = pd.read_csv(self.data_index_path, index_col=0)
-        
-        # Initialize CPD_NAME differently based on the dataset 
+
+        # Initialize CPD_NAME differently based on the dataset
         self.cpd_name = "BROAD_SAMPLE" if self.dataset_name == "cpg0000" else "CPD_NAME"
 
         # Subset the perturbations if provided in mol_list
@@ -119,14 +122,14 @@ class CellDataset:
         # Remove the leave-out drugs if provided in ood_set
         if self.ood_set is not None:
             dataset = dataset.loc[~dataset[self.cpd_name].isin(self.ood_set)]
-        
+
         # Collect the dataset splits
         dataset_splits = dict()
-        
+
         for fold_name in ['train', 'test']:
-            # Divide the dataset in splits 
+            # Divide the dataset in splits
             dataset_splits[fold_name] = {}
-            
+
             # Divide the dataset into splits
             subset = dataset.loc[dataset.SPLIT == fold_name]
             for key in subset.columns:
@@ -157,7 +160,7 @@ class CellDataset:
         """
         Initialize molecule names and counts based on dataset splits.
         """
-        # Get unique mol names 
+        # Get unique mol names
         if not self.batch_correction:
             if not self.multimodal:
                 if self.add_controls:
@@ -174,8 +177,8 @@ class CellDataset:
                     else:
                         trt_idx = self.fold_datasets["train"]["trt_idx"][idx_pert]
                         self.mol_names[pert_type] = np.unique(self.fold_datasets["train"][self.cpd_name][idx_pert][trt_idx])
-                self.n_mol = {key: len(val) for key, val in self.mol_names.items()} 
-        else: 
+                self.n_mol = {key: len(val) for key, val in self.mol_names.items()}
+        else:
             self.mol_names = np.unique(self.fold_datasets['train'][self.batch_key])
             self.n_mol = len(self.mol_names)
 
@@ -196,10 +199,10 @@ class CellDataset:
                 embedding_matrix_modality = torch.nn.Embedding.from_pretrained(embedding_matrix_modality, freeze=True).to(self.device)
                 embedding_matrix.append(embedding_matrix_modality)
                 mol2id[mod] = {mol: id for id, mol in enumerate(self.mol_names[mod])}
-                
+
             self.embedding_matrix = torch.nn.ModuleList(embedding_matrix)
             self.mol2id = mol2id
-            
+
         else:
             if self.trainable_emb or self.batch_correction:
                 self.latent_dim = self.latent_dim
@@ -209,37 +212,38 @@ class CellDataset:
                 embedding_matrix = embedding_matrix.loc[self.mol_names]
                 embedding_matrix = torch.tensor(embedding_matrix.values, dtype=torch.float32, device=self.device)
                 self.embedding_matrix = torch.nn.Embedding.from_pretrained(embedding_matrix, freeze=True).to(self.device)
-            
+
                 self.latent_dim = embedding_matrix.shape[1]
-            
+
             self.mol2id = {mol: id for id, mol in enumerate(self.mol_names)}
 
 class CellDatasetFold(Dataset):
     """
     Dataset fold class for handling train and test splits of cell image data.
 
-    This class inherits from PyTorch's Dataset and provides methods to 
+    This class inherits from PyTorch's Dataset and provides methods to
     handle data loading, transformations, and batch processing.
     """
-    
+
     def __init__(self,
-                 fold, 
-                 image_path, 
-                 data, 
+                 fold,
+                 image_path,
+                 data,
                  mol2id,
                  y2id,
-                 augment_train=True, 
-                 normalize=False, 
-                 dataset_name="bbbc021", 
+                 augment_train=True,
+                 normalize=False,
+                 dataset_name="bbbc021",
                  add_controls=None,
-                 batch_correction=False, 
-                 batch_key="BATCH", 
-                 multimodal=False, 
+                 batch_correction=False,
+                 batch_key="BATCH",
+                 multimodal=False,
                  cpd_name="CPD_NAME",
-                 iter_ctrl=False):
+                 iter_ctrl=False,
+                 channels=None):
         """
         Initialize the CellDatasetFold instance.
-        
+
         Args:
             fold (str): 'train' or 'test' to specify the dataset split.
             image_path (str): Path to the image folder.
@@ -258,7 +262,7 @@ class CellDatasetFold(Dataset):
         super(CellDatasetFold, self).__init__()
 
         self.image_path = image_path
-        self.fold = fold  
+        self.fold = fold
         self.data = data
         self.dataset_name = dataset_name
         self.add_controls = add_controls
@@ -266,6 +270,7 @@ class CellDatasetFold(Dataset):
         self.multimodal = multimodal
         self.cpd_name = cpd_name
         self.iter_ctrl = iter_ctrl
+        self.channels = channels
         # Extract variables
         if self.batch_correction:
             self.file_names = data['SAMPLE_KEY']
@@ -284,7 +289,7 @@ class CellDatasetFold(Dataset):
                 self.dose = {}
             else:
                 self.dose = None
-            
+
             for cond in ["ctrl", "trt"]:
                 if cond == "trt" and add_controls:
                     self.file_names[cond] = self.data['SAMPLE_KEY']
@@ -300,23 +305,23 @@ class CellDatasetFold(Dataset):
                     self.batch[cond] = self.data[batch_key][self.data[f"{cond}_idx"]]
                     if dataset_name == "bbbc021":
                         self.dose[cond] = self.data['DOSE'][self.data[f"{cond}_idx"]]
-        del data 
-        
+        del data
+
         # Whether to perform training augmentation
         self.augment_train = augment_train
-        
-        # One-hot encoders 
+
+        # One-hot encoders
         self.mol2id = mol2id
         self.y2id = y2id
-        
+
         # Transform only the training set and only if required
         self.transform = CustomTransform(augment=(self.augment_train and self.fold == 'train'), normalize=normalize)
 
-        
+
     def __len__(self):
         """
         Return the total number of samples.
-        
+
         Returns:
             int: Number of samples.
         """
@@ -328,52 +333,53 @@ class CellDatasetFold(Dataset):
     def __getitem__(self, idx):
         """
         Generate one example datapoint.
-        
+
         Args:
             idx (int): Index of the sample to retrieve.
-            
+
         Returns:
             dict: Dictionary containing the image tensor, one-hot encoded molecule, annotation ID, dose, and file name.
         """
         # Image must be fetched from disk
         if self.batch_correction:
-            return read_files_batch(self.file_names, 
+            return read_files_batch(self.file_names,
                                     self.mols,
                                     self.mol2id,
-                                    self.y2id, 
-                                    self.y, 
+                                    self.y2id,
+                                    self.y,
                                     self.transform,
-                                    self.image_path, 
-                                    self.dataset_name, 
+                                    self.image_path,
+                                    self.dataset_name,
                                     idx)
         else:
-            return read_files_pert(self.file_names, 
-                                   self.mols, 
-                                   self.mol2id, 
-                                   self.y2id, 
-                                   self.dose, 
-                                   self.y, 
-                                   self.transform, 
-                                   self.image_path, 
+            return read_files_pert(self.file_names,
+                                   self.mols,
+                                   self.mol2id,
+                                   self.y2id,
+                                   self.dose,
+                                   self.y,
+                                   self.transform,
+                                   self.image_path,
                                    self.dataset_name,
                                    idx,
                                    self.multimodal,
                                    self.batch,
-                                   self.iter_ctrl,)
+                                   self.iter_ctrl,
+                                   self.channels,)
 
 class CellDataLoader(LightningDataModule):
     """
     General data loader class for PyTorch Lightning.
 
-    This class handles the creation of data loaders for training and testing, 
+    This class handles the creation of data loaders for training and testing,
     including the initialization of datasets and batch processing.
     """
-    
+
     def __init__(self, args):
 
         """
         Initialize the CellDataLoader instance.
-        
+
         Args:
             args (argparse.Namespace): Arguments containing dataloader configuration.
         """
@@ -393,41 +399,41 @@ class CellDataLoader(LightningDataModule):
         sampler_test = torch.utils.data.DistributedSampler(
             self.test_set, num_replicas=self.args.num_tasks, rank=self.args.global_rank, shuffle=False
         )
-        self.loader_train = torch.utils.data.DataLoader(self.training_set, 
+        self.loader_train = torch.utils.data.DataLoader(self.training_set,
                                                         sampler=sampler_train,
-                                                        batch_size=self.args.batch_size, 
-                                                        num_workers=self.args.num_workers, 
+                                                        batch_size=self.args.batch_size,
+                                                        num_workers=self.args.num_workers,
                                                         pin_memory=self.args.pin_mem,
-                                                        drop_last=True)  
-        self.loader_test = torch.utils.data.DataLoader(self.test_set, 
+                                                        drop_last=True)
+        self.loader_test = torch.utils.data.DataLoader(self.test_set,
                                                        sampler=sampler_test,
-                                                       batch_size=self.args.batch_size, 
-                                                       num_workers=self.args.num_workers, 
-                                                       drop_last=False)          
+                                                       batch_size=self.args.batch_size,
+                                                       num_workers=self.args.num_workers,
+                                                       drop_last=False)
 
     def create_torch_datasets(self):
         """
         Create datasets compatible with the PyTorch training loop.
-        
+
         Returns:
             tuple: Training and test datasets.
         """
-        dataset = CellDataset(self.args, device=self.device) 
-        
+        dataset = CellDataset(self.args, device=self.device)
+
         # Channel dimension
         self.dim = self.args.n_channels
 
         # Integrate embeddings as class attribute
-        self.embedding_matrix = dataset.embedding_matrix  
+        self.embedding_matrix = dataset.embedding_matrix
         self.latent_dim = dataset.latent_dim
 
         # Number of molecules and annotations (the latter can be modes of action/genes...)
         self.n_mol = dataset.n_mol
-        self.num_y = dataset.n_y 
+        self.num_y = dataset.n_y
 
         # Collect training and test set
-        training_set, test_set = dataset.fold_datasets.values()  
-        
+        training_set, test_set = dataset.fold_datasets.values()
+
         # Collect IDs
         self.mol2id = dataset.mol2id
         self.y2id = dataset.y2id
@@ -436,37 +442,37 @@ class CellDataLoader(LightningDataModule):
             self.id2y = {}
             for mod in self.mol2id:
                 self.id2mol[mod] = {val:key for key,val in self.mol2id[mod].items()}
-                self.id2y[mod] = {val:key for key,val in self.y2id.items()} 
+                self.id2y[mod] = {val:key for key,val in self.y2id.items()}
         else:
             self.id2mol = {val:key for key,val in self.mol2id.items()}
-            self.id2y = {val:key for key,val in self.y2id.items()} 
+            self.id2y = {val:key for key,val in self.y2id.items()}
 
         # Free cell painting dataset memory
         del dataset
         return training_set, test_set
-    
+
     def train_dataloader(self):
         """
         Return the training data loader.
-        
+
         Returns:
             DataLoader: Training data loader.
         """
         return self.loader_train
-    
+
     def val_dataloader(self):
         """
         Return the validation data loader.
-        
+
         Returns:
             DataLoader: Validation data loader.
         """
         return self.loader_test
-    
+
     def test_dataloader(self):
         """
         Return the test data loader.
-        
+
         Returns:
             DataLoader: Test data loader.
         """
@@ -476,15 +482,15 @@ class CellDataLoader_Eval(LightningDataModule):
     """
     General data loader class for PyTorch Lightning.
 
-    This class handles the creation of data loaders for training and testing, 
+    This class handles the creation of data loaders for training and testing,
     including the initialization of datasets and batch processing.
     """
-    
+
     def __init__(self, args):
 
         """
         Initialize the CellDataLoader instance.
-        
+
         Args:
             args (argparse.Namespace): Arguments containing dataloader configuration.
         """
@@ -498,41 +504,41 @@ class CellDataLoader_Eval(LightningDataModule):
         Initialize dataset and data loaders.
         """
         self.training_set, self.test_set = self.create_torch_datasets()
-        self.loader_train = torch.utils.data.DataLoader(self.training_set, 
+        self.loader_train = torch.utils.data.DataLoader(self.training_set,
                                                         shuffle=True,
-                                                        batch_size=self.args.batch_size, 
-                                                        num_workers=self.args.num_workers, 
+                                                        batch_size=self.args.batch_size,
+                                                        num_workers=self.args.num_workers,
                                                         pin_memory=self.args.pin_mem,
-                                                        drop_last=True)  
-        self.loader_test = torch.utils.data.DataLoader(self.test_set, 
+                                                        drop_last=True)
+        self.loader_test = torch.utils.data.DataLoader(self.test_set,
                                                        shuffle=False,
-                                                       batch_size=self.args.batch_size, 
-                                                       num_workers=self.args.num_workers, 
-                                                       drop_last=False)          
+                                                       batch_size=self.args.batch_size,
+                                                       num_workers=self.args.num_workers,
+                                                       drop_last=False)
 
     def create_torch_datasets(self):
         """
         Create datasets compatible with the PyTorch training loop.
-        
+
         Returns:
             tuple: Training and test datasets.
         """
-        dataset = CellDataset(self.args, device=self.device) 
-        
+        dataset = CellDataset(self.args, device=self.device)
+
         # Channel dimension
         self.dim = self.args.n_channels
 
         # Integrate embeddings as class attribute
-        self.embedding_matrix = dataset.embedding_matrix  
+        self.embedding_matrix = dataset.embedding_matrix
         self.latent_dim = dataset.latent_dim
 
         # Number of molecules and annotations (the latter can be modes of action/genes...)
         self.n_mol = dataset.n_mol
-        self.num_y = dataset.n_y 
+        self.num_y = dataset.n_y
 
         # Collect training and test set
-        training_set, test_set = dataset.fold_datasets.values()  
-        
+        training_set, test_set = dataset.fold_datasets.values()
+
         # Collect IDs
         self.mol2id = dataset.mol2id
         self.y2id = dataset.y2id
@@ -541,37 +547,37 @@ class CellDataLoader_Eval(LightningDataModule):
             self.id2y = {}
             for mod in self.mol2id:
                 self.id2mol[mod] = {val:key for key,val in self.mol2id[mod].items()}
-                self.id2y[mod] = {val:key for key,val in self.y2id.items()} 
+                self.id2y[mod] = {val:key for key,val in self.y2id.items()}
         else:
             self.id2mol = {val:key for key,val in self.mol2id.items()}
-            self.id2y = {val:key for key,val in self.y2id.items()} 
+            self.id2y = {val:key for key,val in self.y2id.items()}
 
         # Free cell painting dataset memory
         del dataset
         return training_set, test_set
-    
+
     def train_dataloader(self):
         """
         Return the training data loader.
-        
+
         Returns:
             DataLoader: Training data loader.
         """
         return self.loader_train
-    
+
     def val_dataloader(self):
         """
         Return the validation data loader.
-        
+
         Returns:
             DataLoader: Validation data loader.
         """
         return self.loader_test
-    
+
     def test_dataloader(self):
         """
         Return the test data loader.
-        
+
         Returns:
             DataLoader: Test data loader.
         """

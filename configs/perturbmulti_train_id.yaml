@@ -1,8 +1,10 @@
-# Perturb-Multi hepatocytes -- MAIN TRAINING index, HONEST BASELINE.
+# Perturb-Multi hepatocytes -- MAIN TRAINING index.
 # Perturbation condition = pure gene IDENTITY (one-hot -> learnable embedding),
-# NOT a transcriptional readout. Trains on ALL kept genes (TIER1/2 + control,
-# ~163 target genes) to maximize data and learn the full gene-identity space.
-# Image = panel2 [5,9,10] = Perilipin / Calreticulin / pS6RP.
+# NOT a transcriptional readout. Trains on the rna_snr-filtered gene set (TIER1/2 with
+# confirmed knockdown, ~76 target genes) + control.
+# Image panel = channels [0,14,5] = Alb / Rab7 / Perilipin: the broadest/strongest per-gene
+# image responders to the CRISPR set (18-channel effect scan, this session). Replaces the
+# legacy [5,9,10] panel whose Calreticulin responds to only 1 gene (Sel1l).
 task_name: perturbmulti_train_id
 
 ood_set: Null
@@ -10,6 +12,7 @@ mol_list: Null
 trainable_emb: False
 dataset_name: 'perturbmulti'
 n_channels: 3
+channels: [0, 14, 5]   # npz indices: Alb(0), Rab7(14), Perilipin(5)
 multimodal: False
 batch_correction: False
 batch_key: Null

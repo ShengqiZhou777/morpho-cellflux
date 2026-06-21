@@ -129,8 +129,8 @@ def eval_model(
         x_real, y_trg, y_mod = batch['X'], batch['mols'], batch['y_id']
         x_real_ctrl, x_real_trt = x_real
         x_real_ctrl, x_real_trt = x_real_ctrl.to(device), x_real_trt.to(device)
-        y_trg = y_trg.long().to(device)            
-        y_org = None 
+        y_trg = y_trg.long().to(device)
+        y_org = None
         z_emb_trg = datamodule.embedding_matrix(y_trg).to(device)
         samples = None
         labels = None
@@ -170,8 +170,8 @@ def eval_model(
                     x_0 = x_real_ctrl + torch.randn(x_real_ctrl.shape, dtype=torch.float32, device=device) * args.noise_level
                 else:
                     x_0 = torch.randn(x_real_ctrl.shape, dtype=torch.float32, device=device)
-                    
-                
+
+
                 if args.edm_schedule:
                     time_grid = get_time_discretization(nfes=ode_opts["nfe"])
                 else:
@@ -223,12 +223,12 @@ def eval_model(
             )
             if num_synthetic + synthetic_samples.shape[0] > fid_samples:
                 synthetic_samples = synthetic_samples[: fid_samples - num_synthetic]
-            
+
             real_samples = torch.clamp(x_real_trt * 0.5 + 0.5, min=0.0, max=1.0)
             real_samples = torch.floor(real_samples * 255)
             real_samples = real_samples.to(torch.float32) / 255.0
-            
-            
+
+
             fid_metric.update(real_samples, real=True)
             fid_metric.update(synthetic_samples, real=False)
             num_synthetic += synthetic_samples.shape[0]
@@ -327,7 +327,7 @@ def save_interpolation_grid(
         labels = ["Real Ctrl"] + [f"t={t:.2f}" for t in time_grid] + ["Real Trt"]
 
         # Create a grid for visualization
-        
+
         # Determine grid size
         num_images = len(images)
         num_cols = (num_images + 4) // 5  # Auto-calculated columns
@@ -349,3 +349,13 @@ def save_interpolation_grid(
         plt.tight_layout()
         plt.savefig(sample_save_path, dpi=300)
         plt.close()
+        # Also dump raw per-cell trajectory arrays (in [-1,1]) for the polished figure
+        # renderer (scripts/plot_trajectory_figure.py). Only runs in --interpolate mode.
+        np.savez(
+            save_dir / f"sample_{b}_traj.npz",
+            control=real_ctrl[b].cpu().numpy(),
+            trajectory=intermediate_images[:, b].cpu().numpy(),
+            target=real_trt[b].cpu().numpy(),
+            gene=int(y_trg[b].cpu().numpy()),
+            t_grid=time_grid.detach().cpu().numpy(),
+        )
