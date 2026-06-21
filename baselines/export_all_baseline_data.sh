@@ -6,15 +6,15 @@ set -euo pipefail
 # configs used by the proposed method.
 
 python baselines/export_baseline_data.py \
-  --config configs/diet_id_v3.yaml \
-  --benchmark diet_v3 \
-  --output outputs/baselines/_data/diet_v3 \
+  --config configs/diet_id.yaml \
+  --benchmark diet \
+  --output outputs/baselines/_data/diet \
   --splits train,test \
   --workers "${EXPORT_WORKERS:-8}"
 
 python baselines/export_baseline_data.py \
   --config configs/perturbmulti_train_id.yaml \
-  --benchmark crispr_v8 \
-  --output outputs/baselines/_data/crispr_v8 \
+  --benchmark crispr \
+  --output outputs/baselines/_data/crispr \
   --splits train,test \
   --workers "${EXPORT_WORKERS:-8}"

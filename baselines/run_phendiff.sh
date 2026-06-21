@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-BENCHMARK="${BENCHMARK:-diet_v3}"
+BENCHMARK="${BENCHMARK:-diet}"
 EPOCHS="${EPOCHS:-8}"
 BATCH="${BATCH:-16}"
 EVAL_BATCH="${EVAL_BATCH:-16}"
@@ -12,16 +12,16 @@ GUIDANCE="${GUIDANCE:-1.5}"
 FRAC_DIFFUSION_SKIPPED="${FRAC_DIFFUSION_SKIPPED:-0.55}"
 
 case "$BENCHMARK" in
-  diet_v3)
-    CONFIG="configs/diet_id_v3.yaml"
-    OUT="outputs/baselines/phendiff/diet_v3"
+  diet)
+    CONFIG="configs/diet_id.yaml"
+    OUT="outputs/baselines/phendiff/diet"
     ;;
-  crispr_v8)
+  crispr)
     CONFIG="configs/perturbmulti_train_id.yaml"
-    OUT="outputs/baselines/phendiff/crispr_v8"
+    OUT="outputs/baselines/phendiff/crispr"
     ;;
   *)
-    echo "Unknown BENCHMARK=$BENCHMARK; expected diet_v3 or crispr_v8" >&2
+    echo "Unknown BENCHMARK=$BENCHMARK; expected diet or crispr" >&2
     exit 2
     ;;
 esac

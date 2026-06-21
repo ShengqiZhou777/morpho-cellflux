@@ -7,10 +7,10 @@ treated->control mapping.
 
 Usage:
   python scripts/diet_marker_distribution_figure.py \
-    --run-dir outputs/runs/diet/diet_id_v3_fid5k \
+    --run-dir outputs/runs/diet/fid5k \
     --epoch 12 \
     --out-dir outputs/figures/diet \
-    --prefix diet_v3_fid5k
+    --prefix diet_fid5k
 """
 import argparse
 import csv

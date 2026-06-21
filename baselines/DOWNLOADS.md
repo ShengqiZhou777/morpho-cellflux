@@ -40,7 +40,7 @@ For the BIBM method-comparison table, every method should be trained and
 evaluated on the same local data:
 
 ```text
-configs/diet_id_v3.yaml
+configs/diet_id.yaml
 configs/perturbmulti_train_id.yaml
 data/processed/diet/index_diet.csv
 data/processed/perturbmulti/index_train.csv

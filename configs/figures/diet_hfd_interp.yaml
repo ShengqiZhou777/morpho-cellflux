@@ -1,4 +1,4 @@
-# HFD-only interpolation config: same data/panel/embedding as diet_id_v3, but the data index
+# HFD-only interpolation config: same data/panel/embedding as diet_id, but the data index
 # is filtered to test-split hfd (treated) + adlib (control pool) with hfd ordered FIRST, so the
 # single interpolation batch visualizes HFD trajectories (the strong steatosis condition).
 # Use only with scripts/interpolate.sh (--eval_only --interpolate). NOT for training.

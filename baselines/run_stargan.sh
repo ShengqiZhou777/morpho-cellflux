@@ -1,21 +1,21 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-BENCHMARK="${BENCHMARK:-diet_v3}"
+BENCHMARK="${BENCHMARK:-diet}"
 NUM_ITERS="${NUM_ITERS:-50000}"
 BATCH="${BATCH:-16}"
 
 case "$BENCHMARK" in
-  diet_v3)
-    CONFIG="configs/diet_id_v3.yaml"
-    OUT="outputs/baselines/stargan/diet_v3"
+  diet)
+    CONFIG="configs/diet_id.yaml"
+    OUT="outputs/baselines/stargan/diet"
     ;;
-  crispr_v8)
+  crispr)
     CONFIG="configs/perturbmulti_train_id.yaml"
-    OUT="outputs/baselines/stargan/crispr_v8"
+    OUT="outputs/baselines/stargan/crispr"
     ;;
   *)
-    echo "Unknown BENCHMARK=$BENCHMARK; expected diet_v3 or crispr_v8" >&2
+    echo "Unknown BENCHMARK=$BENCHMARK; expected diet or crispr" >&2
     exit 2
     ;;
 esac

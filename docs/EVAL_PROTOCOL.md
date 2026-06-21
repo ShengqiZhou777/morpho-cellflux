@@ -56,7 +56,7 @@ though it applies no perturbation:
 | copy_control | **7.96** | **12.01** | **0.0039** | **0.0057** | 49.92 |
 | PhenDiff | 10.92 | 13.97 | 0.0066 | 0.0075 | 60.69 |
 | IMPA | 52.29 | 55.43 | 0.0407 | 0.0424 | **63.97** |
-| proposed ep12 5K | 31.26 | 35.43 | 0.0267 | 0.0291 | 54.93 |
+| Morpho-CellFlux | 31.26 | 35.43 | 0.0267 | 0.0291 | 54.93 |
 
 Conclusion: FID/KID remain required for external comparison, but cannot be used
 alone to claim biological success on this dataset. If a no-perturbation
@@ -97,7 +97,7 @@ methods inside the same table.
 | Treated classes | fasted, hfd | 76 rna_snr-filtered genes |
 | Active panel | `[9,5,8]` Calreticulin / Perilipin / TOMM20 | `[0,14,5]` Alb / Rab7 / Perilipin |
 | Main biological metric | per-condition marker gap closure | direction recovery and pooled marker gap closure |
-| Current proposed run | `outputs/runs/diet/diet_id_v3_fid5k` | `outputs/runs/crispr/cellflux_pm_train_id_v8` |
+| Current proposed run | `outputs/runs/diet/fid5k` | `outputs/runs/crispr/main` |
 
 Diet is the strong physiological demonstration. CRISPR is the clean gene-identity
 benchmark but has weaker effects and should be reported distributionally.
@@ -154,19 +154,19 @@ Script:
 
 ```text
 python scripts/diet_marker_distribution_figure.py \
-  --run-dir outputs/runs/diet/diet_id_v3_fid5k \
+  --run-dir outputs/runs/diet/fid5k \
   --epoch 12 \
   --out-dir outputs/figures/diet \
-  --prefix diet_v3_fid5k
+  --prefix diet_fid5k
 ```
 
 Outputs:
 
 ```text
-outputs/figures/diet/diet_v3_fid5k_marker_distributions.png
-outputs/figures/diet/diet_v3_fid5k_mean_shift.png
-outputs/figures/diet/diet_v3_fid5k_marker_distribution_summary.csv
-outputs/figures/diet/diet_v3_fid5k_marker_distribution_summary.json
+outputs/figures/diet/diet_fid5k_marker_distributions.png
+outputs/figures/diet/diet_fid5k_mean_shift.png
+outputs/figures/diet/diet_fid5k_marker_distribution_summary.csv
+outputs/figures/diet/diet_fid5k_marker_distribution_summary.json
 ```
 
 Generated-vs-target means:
@@ -198,7 +198,7 @@ control gap closure. A DDP bug in older evals let each rank overwrite this JSON,
 so a 2-GPU 5120-image eval could have only 2560 mappings. The eval loop now
 gathers mappings across ranks before the main process writes the JSON.
 
-For old affected outputs:
+For outputs produced before this fix:
 
 - gen-vs-target distribution metrics remain usable for all generated images;
 - paired control/gap_closed metrics must disclose the mapped-row count;

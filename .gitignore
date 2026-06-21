@@ -21,15 +21,6 @@ dist/
 
 logs/
 outputs/
-outputs/cellflux_*/
-outputs/v*_interp*/
-outputs/*.nohup
-outputs/diagnostics/
-outputs/cpu_smoke/
-outputs/ddp_sanity*/
-outputs/checkpoints/
-outputs/images/
-outputs/metrics/
 
 data/raw/*
 data/processed/*

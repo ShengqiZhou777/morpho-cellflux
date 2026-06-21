@@ -11,7 +11,7 @@ raw assets (morpho-phenotyping)               external h5ad (RNA/protein) + mani
         |                                                   |
         v                                                   v
   morphoflux.data.DataFactory  ───────────►  scripts/build_perturbmulti_data.py
-  (scripts/materialize_data.py)              - index_train.csv (all kept genes, 163)
+  (scripts/materialize_data.py)              - index_train.csv (rna_snr-filtered genes)
   - manifest.parquet                - index_eval_leadgenes.csv (5-gene figure subset)
   - condition_vocab.json                     - embedding_gene_identity.csv (204 one-hot*)
                                              - channel_effects.csv, perturbation_effects.csv
@@ -30,7 +30,6 @@ raw assets (morpho-phenotyping)               external h5ad (RNA/protein) + mani
             - delta_scatter.py     : Δ-direction scatter (the quantitative figure)
             - population_phenotype.py : control vs generated vs KO distributions (visible effect)
             - interpolate.sh : interpolation trajectory grid (qualitative)
-            - mean_image_figure.py : per-gene spatial mean (documented NEGATIVE result)
 ```
 
 ## Package layout
@@ -47,10 +46,13 @@ raw assets (morpho-phenotyping)               external h5ad (RNA/protein) + mani
 ## Modality semantics (pinned — do not muddle)
 - **Perturbation = sgRNA -> target gene IDENTITY** (the condition). 204-dim one-hot over
   the barcode vocabulary = 202 target genes + `control` + `__null__` (unassigned-guide QC
-  class); only the 163 quality-passing genes are used as training conditions.
+  class); the current CRISPR training index uses the rna_snr-filtered quality-passing genes.
 - **209-gene MERFISH = a transcriptional READOUT** of the imaged cells (NOT the condition).
-- **18-channel protein/morphology = the imaging READOUT**; panel2 = npz `[5,9,10]` =
-  Perilipin / Calreticulin / pS6RP. The model generates this 3-channel panel.
+- **18-channel protein/morphology = the imaging READOUT**. The model generates a
+  config-selected 3-channel panel: Diet uses `[9,5,8]` =
+  Calreticulin / Perilipin / TOMM20; CRISPR uses `[0,14,5]` =
+  Alb / Rab7 / Perilipin. The legacy fallback panel `[5,9,10]` is kept only for
+  older configs without an explicit `channels` field.
 - Genome-wide Perturb-seq (GSE275483) = adjacent sections; a possible future *rich*
   condition. The 209-MERFISH and genome-wide data are different things.
 
@@ -59,17 +61,17 @@ raw assets (morpho-phenotyping)               external h5ad (RNA/protein) + mani
 pip install -e .            # registers morphoflux + engine (deps in pyproject)
 
 # train (2-GPU DDP), config resolved from configs/
-OUT=outputs/<run> CONFIG=perturbmulti_train_id DATASET=perturbmulti_id \
+OUT=outputs/runs/crispr/main CONFIG=perturbmulti_train_id DATASET=perturbmulti_id \
   bash scripts/train.sh
 
 # evaluate a run (per-gene Δ-direction for an epoch)
-python scripts/aggregate_eval.py outputs/<run> 3 <epoch>
-python scripts/delta_scatter.py  outputs/<run> 3
-python scripts/population_phenotype.py outputs/<run> lipid Eif2s1,Pten,Aars,Insig1 <epoch>
+python scripts/aggregate_eval.py outputs/runs/crispr/main 5 <epoch>
+python scripts/delta_scatter.py  outputs/runs/crispr/main 5
+python scripts/population_phenotype.py outputs/runs/crispr/main lipid Eif2s1,Pten,Aars,Insig1 <epoch>
 
 # qualitative interpolation grid on the best checkpoint
-CKPT=outputs/<run>/checkpoint-<e>.pth OUT=outputs/<run> \
-  CONFIG=perturbmulti_interp_leadgenes GPU=0 bash scripts/interpolate.sh
+CKPT=outputs/runs/crispr/main/checkpoint-<e>.pth OUT=outputs/runs/crispr/main \
+  CONFIG=figures/perturbmulti_leadgenes_interp GPU=0 bash scripts/interpolate.sh
 ```
 
 ## Evaluation philosophy
@@ -82,4 +84,3 @@ effects a good FID does not guarantee the right biological movement, so the two 
 reported together — and FID should not be the *sole* checkpoint-selection criterion (it
 can keep rising while Δ-direction still improves). The interpolation grid is qualitative
 only — its trajectory is always smooth, so it never stands alone as a correctness claim.
-

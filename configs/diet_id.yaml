@@ -1,8 +1,9 @@
-# Diet hepatocytes -- strong physiological perturbation.
-# Condition = diet state (adlib / fasted / hfd), a 3-dim one-hot -> learnable embedding.
-# adlib is the control (source); fasted/hfd are treated (targets). Image = panel2 [5,9,10].
-# NOTE: diet state is confounded with imaging batch; BATCH is collapsed in the index so
-# control/treated can pair (see scripts/build_diet_data.py header).
+# Diet hepatocytes -- strong physiological perturbation benchmark.
+# Condition = diet state (adlib / fasted / hfd), a 3-dim one-hot.
+# adlib is the control/source; fasted and hfd are treated/target states.
+# Image panel = channels [9,5,8] = Calreticulin / Perilipin / TOMM20.
+# NOTE: diet state is confounded with imaging batch; BATCH is collapsed in the
+# index so control/treated cells can pair (see scripts/build_diet_data.py).
 task_name: diet_id
 
 ood_set: Null
@@ -10,6 +11,7 @@ mol_list: Null
 trainable_emb: False
 dataset_name: 'perturbmulti'
 n_channels: 3
+channels: [9, 5, 8]   # npz indices: Calreticulin(9), Perilipin(5), TOMM20(8)
 multimodal: False
 batch_correction: False
 batch_key: Null
@@ -23,5 +25,5 @@ image_path: data/raw/diet_extracted_images
 data_index_path: data/processed/diet/index_diet.csv
 embedding_path: data/processed/diet/embedding_diet.csv
 
-augment_train: False
+augment_train: True
 normalize: False

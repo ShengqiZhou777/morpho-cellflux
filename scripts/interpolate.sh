@@ -33,7 +33,7 @@ fi
 
 CKPT=${CKPT:?set CKPT=<path to a checkpoint-*.pth>}
 OUT=${OUT:?set OUT=<output dir; interpolation/ is written under it>}
-CONFIG=${CONFIG:-perturbmulti_interp_leadgenes}  # config name under configs/.
+CONFIG=${CONFIG:-figures/perturbmulti_leadgenes_interp}  # config name under configs/.
 DATASET=${DATASET:-perturbmulti_id}
 USE_INITIAL=${USE_INITIAL:-2}     # 2 starts the trajectory at a real control cell.
 NOISE_LEVEL=${NOISE_LEVEL:-0.2}

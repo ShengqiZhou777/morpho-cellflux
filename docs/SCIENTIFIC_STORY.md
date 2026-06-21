@@ -91,9 +91,9 @@ whether the conditional distribution moves in the right marker space.
 Run:
 
 ```text
-outputs/runs/diet/diet_id_v3_fid5k
-checkpoint: outputs/runs/diet/diet_id_v3/checkpoint-11.pth
-generated: outputs/runs/diet/diet_id_v3_fid5k/fid_samples/epoch-12
+outputs/runs/diet/fid5k
+checkpoint: outputs/runs/diet/main/checkpoint-11.pth
+generated: outputs/runs/diet/fid5k/fid_samples/epoch-12
 N: 5120 generated PNGs
 panel: Calreticulin / Perilipin / TOMM20
 ```
@@ -102,19 +102,19 @@ Reproducible figure/script:
 
 ```text
 python scripts/diet_marker_distribution_figure.py \
-  --run-dir outputs/runs/diet/diet_id_v3_fid5k \
+  --run-dir outputs/runs/diet/fid5k \
   --epoch 12 \
   --out-dir outputs/figures/diet \
-  --prefix diet_v3_fid5k
+  --prefix diet_fid5k
 ```
 
 Outputs:
 
 ```text
-outputs/figures/diet/diet_v3_fid5k_marker_distributions.png
-outputs/figures/diet/diet_v3_fid5k_mean_shift.png
-outputs/figures/diet/diet_v3_fid5k_marker_distribution_summary.csv
-outputs/figures/diet/diet_v3_fid5k_marker_distribution_summary.json
+outputs/figures/diet/diet_fid5k_marker_distributions.png
+outputs/figures/diet/diet_fid5k_mean_shift.png
+outputs/figures/diet/diet_fid5k_marker_distribution_summary.csv
+outputs/figures/diet/diet_fid5k_marker_distribution_summary.json
 ```
 
 Generated-vs-target foreground marker means:
@@ -147,7 +147,7 @@ Diet 5K comparison at matched per-condition cap 2466 (`N=4932`):
 | copy_control | **7.96** | **12.01** | **0.0039** | **0.0057** | 49.92 |
 | PhenDiff | 10.92 | 13.97 | 0.0066 | 0.0075 | 60.69 |
 | IMPA | 52.29 | 55.43 | 0.0407 | 0.0424 | **63.97** |
-| proposed ep12 5K | 31.26 | 35.43 | 0.0267 | 0.0291 | 54.93 |
+| Morpho-CellFlux | 31.26 | 35.43 | 0.0267 | 0.0291 | 54.93 |
 
 This table prevents overclaiming:
 
@@ -173,7 +173,7 @@ montage.
 Current best one-hot CRISPR run:
 
 ```text
-outputs/runs/crispr/cellflux_pm_train_id_v8
+outputs/runs/crispr/main
 panel: Alb / Rab7 / Perilipin
 condition: target-gene one-hot
 ```

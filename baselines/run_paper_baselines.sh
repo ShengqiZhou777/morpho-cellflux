@@ -8,7 +8,7 @@ set -euo pipefail
 PROJECT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$PROJECT"
 
-BENCHMARKS="${BENCHMARKS:-diet_v3 crispr_v8}"
+BENCHMARKS="${BENCHMARKS:-diet crispr}"
 INCLUDE_STARGAN="${INCLUDE_STARGAN:-1}"
 
 summary_exists() {
@@ -17,8 +17,8 @@ summary_exists() {
 
 benchmark_config() {
   case "$1" in
-    diet_v3) echo "configs/diet_id_v3.yaml" ;;
-    crispr_v8) echo "configs/perturbmulti_train_id.yaml" ;;
+    diet) echo "configs/diet_id.yaml" ;;
+    crispr) echo "configs/perturbmulti_train_id.yaml" ;;
     *)
       echo "Unknown benchmark: $1" >&2
       return 2

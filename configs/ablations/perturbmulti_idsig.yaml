@@ -1,19 +1,19 @@
-# Perturb-Multi hepatocytes -- CRISPR with RNA-SIGNATURE conditioning (vs the one-hot v8).
+# Perturb-Multi hepatocytes -- CRISPR RNA-signature conditioning ablation.
 # Condition = concat[ gene-identity one-hot (204) ; scale-balanced 209-dim MERFISH RNA
 # signature (209) ] = 413  (embedding_gene_idsig.csv). The signature S(g) is the per-gene
 # mean 209-gene RNA, z-scored vs control (non-leaky: gene-level average, not the cell's own
 # RNA). Genes without a signature fall back to pure identity (zero signature block).
-# Same image panel + rna_snr-filtered 76-gene index as v8, so the ONLY change vs v8 is the
+# Same image panel + rna_snr-filtered 76-gene index as the one-hot main config, so the ONLY change is the
 # condition -> isolates the effect of richer conditioning. Uses arch perturbmulti_idsig
 # (condition_dim 413); run with DATASET=perturbmulti_idsig.
-task_name: perturbmulti_train_idsig
+task_name: perturbmulti_idsig
 
 ood_set: Null
 mol_list: Null
 trainable_emb: False
 dataset_name: 'perturbmulti'
 n_channels: 3
-channels: [0, 14, 5]   # npz indices: Alb(0), Rab7(14), Perilipin(5) -- same as v8
+channels: [0, 14, 5]   # npz indices: Alb(0), Rab7(14), Perilipin(5)
 multimodal: False
 batch_correction: False
 batch_key: Null

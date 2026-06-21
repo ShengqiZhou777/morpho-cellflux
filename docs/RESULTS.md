@@ -1,95 +1,83 @@
-# Paper-Ready Results — CellFlux on Perturb-Multi Hepatocytes
+# Result Snapshot
 
-Curated best results, finalized 2026-06-20. Every number is tagged with its **run dir,
-checkpoint epoch, and metric definition** so it is reproducible and honest — no number here
-is hand-edited. "Best checkpoint" = legitimate selection by the biology metric `gap_closed`
-(never FID; see caveats), exactly as `docs/EXPERIMENTS.md` prescribes.
+This page records the current public-facing result snapshot. It is intentionally
+short; detailed run history belongs in internal lab notes, not in the GitHub
+release surface.
 
-> **2026-06-21 status note:** these are biology-oriented internal result records, not the
-> final method-ranking table. The current paper story and metric hierarchy are in
-> `docs/SCIENTIFIC_STORY.md` and `docs/EVAL_PROTOCOL.md`: FID/KID/MoA are reported for
-> CellFlux comparability, while Perturb-Multi's primary biological claim is marker
-> distribution transport. The Diet 5K table shows copy-control wins FID/KID, PhenDiff is
-> best nontrivial by FID/KID, and IMPA is best by MoA; the proposed model's current positive
-> evidence is the marker-distribution shift, not superiority under standard image metrics.
+## Metric Roles
 
-Compact paper-table extracts are in `docs/PAPER_TABLE_DATA.md`; the machine-readable TSV is
-`data/reports/paper_table_data.tsv`.
+| metric | role |
+|---|---|
+| FID/KID | CellFlux-style image-realism and comparability metrics |
+| MoA | condition-separability proxy when the real-image ceiling is above chance |
+| marker gap closure | primary biological metric for Diet marker phenotype transport |
+| direction recovery | primary CRISPR metric across genes and marker channels |
 
-## Metric definitions (read first)
-- **`gap_closed` = 1 − W(gen,tgt) / W(src,tgt)**, where W is the 1-D Wasserstein distance
-  between per-cell channel-mean distributions. 1 = generated population matches the real
-  perturbed population; 0 = no better than copying the control (src); <0 = worse than copy.
-  Pooled over genes for CRISPR; computed **per condition** for diet (only 2 treated states).
-- **`dir_corr` / `sign_agree`** = recovery of the perturbation *direction*
-  `(gen_KO − gen_ctrl)` vs `(real_KO − real_ctrl)` across genes; sign_agree = fraction of
-  genes whose shift sign is correct.
-- Reproduce any row: `python scripts/aggregate_eval.py <run_dir> 5 <epoch>`.
+See `docs/EVAL_PROTOCOL.md` for exact definitions.
 
----
+## Diet Marker Transport
 
-## Result 1 — Diet perturbation (HEADLINE; strong physiological effect)
-Run `outputs/diet_id_v3` · channels `[9,5,8]` = Calreticulin / Perilipin / TOMM20 ·
-diet one-hot (control = adlib; treated = fasted, hfd) · 12 epochs.
+Active config: `configs/diet_id.yaml`
+Panel: `[9,5,8]` = Calreticulin / Perilipin / TOMM20
+Condition: adlib control -> fasted / hfd
 
-**Balanced checkpoint = epoch 9 (`checkpoint-9.pth`)** — both treated states strong:
+The 5K Diet marker-distribution check uses:
 
-| condition | Calreticulin | Perilipin | TOMM20 |
-|---|---:|---:|---:|
-| fasted | 0.86 | 0.40 | 0.40 |
-| hfd    | 0.88 | 0.62 | 0.36 |
+```bash
+python scripts/diet_marker_distribution_figure.py \
+  --run-dir outputs/runs/diet/fid5k \
+  --epoch 12 \
+  --out-dir outputs/figures/diet \
+  --prefix diet_fid5k
+```
 
-**HFD-peak checkpoint = epoch 11 (`checkpoint-11.pth`)** — for an HFD-only figure
-(saved at `aggregate_eval_summary_hfdpeak_ep11.json`):
+Generated-vs-target foreground marker means:
 
-| condition | Calreticulin | Perilipin | TOMM20 |
-|---|---:|---:|---:|
-| hfd | **0.91** | **0.85** | **0.81** |
+| condition | marker | generated | target | read |
+|---|---|---:|---:|---|
+| fasted | Calreticulin | 0.3715 | 0.3528 | slight overshoot |
+| fasted | Perilipin | 0.3208 | 0.3123 | slight overshoot |
+| fasted | TOMM20 | 0.4115 | 0.4122 | close |
+| hfd | Calreticulin | 0.4213 | 0.4173 | close |
+| hfd | Perilipin | 0.3514 | 0.3555 | close |
+| hfd | TOMM20 | 0.4235 | 0.4423 | under-shift |
 
-> Citable: *"On a strong dietary perturbation, CellFlux closes 81–91% of the control→HFD
-> morphology-distribution gap across three markers (Calreticulin, Perilipin, TOMM20). At a
-> single balanced checkpoint it simultaneously recovers fasted (0.40–0.86) and HFD (0.36–0.88)."*
-- Caveat to disclose: **fasted overshoots after epoch 9** (Perilipin 0.40→0.01 by ep11), so
-  ep11 numbers are HFD-only. Diet is confounded with imaging batch (see EXPERIMENTS).
+Interpretation: the clearest positive signal is Diet HFD marker-distribution
+movement, especially Calreticulin and Perilipin. TOMM20 moves in the right
+direction but remains under-shifted for HFD.
 
-## Result 2 — CRISPR gene-identity conditioning (clean main claim)
-Run `outputs/cellflux_pm_train_id_v8` · channels `[0,14,5]` = Alb / Rab7 / Perilipin ·
-one-hot condition (dim 204) · 76-gene rna_snr-filtered index · 20 epochs ·
-**best = epoch 19 (`checkpoint-19.pth`)**, eval_fid 16.3.
+## CellFlux-Style Diet Table
 
-| channel | gap_closed (pooled) | dir_corr | sign_agree | pearson |
-|---|---:|---:|---:|---:|
-| Alb       | **+0.18** | 0.68 | 0.74 | 0.25 |
-| Rab7      | **+0.15** | 0.61 | 0.74 | 0.10 |
-| Perilipin | −0.14 | 0.42 | 0.68 | 0.50 |
+Matched Diet 5K table, cap=2466 per treated condition (`N=4932`):
 
-> Citable: *"Conditioned only on target-gene identity, CellFlux recovers the correct sign of
-> the morphology shift for ~74% of held-out genes on Alb and Rab7 (dir_corr 0.68 / 0.61) and
-> closes 15–18% of the population gap, at matched image quality (FID 16.3)."*
-- Honest framing: CRISPR single-gene effects are subtle (≪ cell-to-cell variance), so
-  report **distribution-level** panels, not single-cell morphs. Perilipin gap_closed is
-  slightly negative though its correlation is the highest — report channel-by-channel.
+| method | FIDo | FIDc | KIDo | KIDc | MoA-Acc |
+|---|---:|---:|---:|---:|---:|
+| copy_control | **7.96** | **12.01** | **0.0039** | **0.0057** | 49.92 |
+| PhenDiff | 10.92 | 13.97 | 0.0066 | 0.0075 | 60.69 |
+| IMPA | 52.29 | 55.43 | 0.0407 | 0.0424 | **63.97** |
+| proposed | 31.26 | 35.43 | 0.0267 | 0.0291 | 54.93 |
 
-## Result 3 (ablation / negative) — RNA-signature conditioning did NOT help
-Run `outputs/cellflux_pm_train_id_v9` · same channels/index as v8, condition = one-hot ⊕
-scaled per-gene RNA signature (concat-413). Apples-to-apples vs v8.
+This table is the main reason FID/KID are not treated as the primary biological
+metric here: a no-perturbation copy-control baseline wins FID/KID because
+same-batch control images are realistic.
 
-**RNA-signature conditioning is systematically worse than plain one-hot on Alb & Rab7 at
-every epoch** (gap_closed e9/e14/e19: Alb −0.78/−1.76/−0.99, Rab7 −0.75/−0.86/−1.39), and
-only wins on Perilipin (+0.22→+0.32; pearson 0.51 vs v8's 0.50). FID is identical (~16),
-i.e. blind to the difference. Reportable as a clean negative ablation: *the gene-level
-transcriptional signature did not improve — and degraded — morphology-shift recovery vs
-one-hot identity.* Full detail in `docs/EXPERIMENTS.md` (session 3).
+## CRISPR Direction Recovery
 
----
+Active config: `configs/perturbmulti_train_id.yaml`
+Panel: `[0,14,5]` = Alb / Rab7 / Perilipin
+Condition: target-gene one-hot
 
-## Cross-cutting caveats (must accompany any of the above)
-1. **FID is not a selection metric here** — under control-init it is anti-correlated with
-   biology (diet_v1 FID 25→62 while gap_closed peaked). All checkpoints above were selected
-   by `gap_closed`, FID reported only as image-quality context.
-2. **Copy-control baseline** is the honest zero: `gap_closed ≤ 0` means "no better than
-   handing back the control image."
-3. **Diet/batch confound**: diet state co-varies with imaging batch (BATCH collapsed to 0 for
-   pairing); batch effects ride along with the diet signal.
-4. **Unpaired data**: control→perturbed is one-to-many; there is no true target image for a
-   given control. Distribution-level metrics only.
+Current public claim: CRISPR effects are subtle, so the result should be shown
+with distribution-level metrics and gene/channel summaries, not single-cell
+before/after visual claims. The strongest current signal is partial direction
+recovery on Alb and Rab7, with weaker Perilipin gap closure.
+
+## Caveats
+
+- Diet state is confounded with imaging batch; this is disclosed in the data
+  builder and evaluation protocol.
+- Control->treated pairs are unpaired population samples, not same-cell
+  trajectories.
+- Older Diet 5K outputs generated before the DDP mapping fix have 5120 PNGs but
+  only 2560 paired control mappings. Gen-vs-target distributions remain valid;
+  paired gap-closure should be rerun for final figures.

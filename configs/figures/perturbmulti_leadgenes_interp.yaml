@@ -1,18 +1,16 @@
-# Perturb-Multi hepatocytes -- INTERPOLATION FIGURE subset (lead genes only).
-# Same setup as perturbmulti_train_id (gene-identity one-hot, panel2 [5,9,10]),
-# but the treated cells are restricted to 5 lead genes spanning all 3 channels so the
-# single interpolation eval batch always lands on genes with real signal:
-#   Pten, Eif2s1 -> Perilipin (steatosis);  Atp2a2 -> Calreticulin (UPR);
-#   Cdc37, Tsc1  -> pS6RP (mTOR).  Pten moves both Perilipin and pS6RP.
+# Perturb-Multi hepatocytes -- interpolation figure subset (lead genes only).
+# Same setup as perturbmulti_train_id (gene-identity one-hot), but the treated
+# cells are restricted to lead genes spanning the active CRISPR panel.
 # Used only by scripts/interpolate.sh (eval_only --interpolate). The full
 # control pool is kept for same-BATCH source pairing.
-task_name: perturbmulti_interp_leadgenes
+task_name: perturbmulti_leadgenes_interp
 
 ood_set: Null
 mol_list: Null
 trainable_emb: False
 dataset_name: 'perturbmulti'
 n_channels: 3
+channels: [0, 14, 5]   # Alb(0), Rab7(14), Perilipin(5)
 multimodal: False
 batch_correction: False
 batch_key: Null

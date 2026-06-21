@@ -60,8 +60,8 @@ runtime configs point to these generated paths.
 Diet headline run:
 
 ```bash
-OUT=outputs/runs/diet/diet_id_v3 \
-CONFIG=diet_id_v3 DATASET=diet_id \
+OUT=outputs/runs/diet/main \
+CONFIG=diet_id DATASET=diet_id \
 EPOCHS=12 EVAL_FREQ=2 FID_SAMPLES=5120 \
 NPROC=2 BATCH=16 USE_INITIAL=1 CFG=0.2 \
 bash scripts/train.sh
@@ -70,7 +70,7 @@ bash scripts/train.sh
 CRISPR one-hot run:
 
 ```bash
-OUT=outputs/runs/crispr/cellflux_pm_train_id_v8 \
+OUT=outputs/runs/crispr/main \
 CONFIG=perturbmulti_train_id DATASET=perturbmulti_id \
 EPOCHS=20 EVAL_FREQ=5 FID_SAMPLES=5120 \
 NPROC=2 BATCH=16 USE_INITIAL=1 CFG=0.2 \
@@ -80,8 +80,8 @@ bash scripts/train.sh
 Optional CRISPR one-hot + RNA-signature ablation:
 
 ```bash
-OUT=outputs/runs/crispr/cellflux_pm_train_id_v9 \
-CONFIG=perturbmulti_train_idsig DATASET=perturbmulti_idsig \
+OUT=outputs/runs/crispr/idsig_ablation \
+CONFIG=ablations/perturbmulti_idsig DATASET=perturbmulti_idsig \
 EPOCHS=20 EVAL_FREQ=5 FID_SAMPLES=5120 \
 NPROC=2 BATCH=16 USE_INITIAL=1 CFG=0.2 \
 bash scripts/train.sh
@@ -92,18 +92,18 @@ bash scripts/train.sh
 Marker gap/direction summaries:
 
 ```bash
-python scripts/aggregate_eval.py outputs/runs/diet/diet_id_v3 5 9
-python scripts/aggregate_eval.py outputs/runs/crispr/cellflux_pm_train_id_v8 5 19
+python scripts/aggregate_eval.py outputs/runs/diet/main 5 9
+python scripts/aggregate_eval.py outputs/runs/crispr/main 5 19
 ```
 
 Diet marker distribution figure:
 
 ```bash
 python scripts/diet_marker_distribution_figure.py \
-  --run-dir outputs/runs/diet/diet_id_v3_fid5k \
+  --run-dir outputs/runs/diet/fid5k \
   --epoch 12 \
   --out-dir outputs/figures/diet \
-  --prefix diet_v3_fid5k
+  --prefix diet_fid5k
 ```
 
 The Diet 5K marker-distribution script writes both figures and machine-readable
@@ -123,7 +123,7 @@ Run the baseline queue:
 bash baselines/run_paper_baselines.sh
 ```
 
-Detached launchers accept `CONDA_ENV`, `CONDA_BIN`, or `CONDA_SH` overrides if
+Set `CONDA_ENV`, `CONDA_BIN`, or `CONDA_SH` before launching baseline scripts if
 your cluster does not expose conda on `PATH`.
 
 Collect method tables:

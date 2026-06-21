@@ -71,27 +71,27 @@ Keep method-comparison outputs separate from proposed-method runs:
 
 | Method | Diet output | CRISPR output |
 |---|---|---|
-| Copy-control | `outputs/baselines/copy_control/diet_v3` | `outputs/baselines/copy_control/crispr_v8` |
-| PhenDiff | `outputs/baselines/phendiff/diet_v3` | `outputs/baselines/phendiff/crispr_v8` |
-| IMPA | `outputs/baselines/impa/diet_v3` | `outputs/baselines/impa/crispr_v8` |
-| StarGAN | `outputs/baselines/stargan/diet_v3` | `outputs/baselines/stargan/crispr_v8` |
-| MorphoDiff | `outputs/baselines/morphodiff/diet_v3` | `outputs/baselines/morphodiff/crispr_v8` |
-| No-control diffusion/FM | `outputs/baselines/no_control_fm/diet_v3` | `outputs/baselines/no_control_fm/crispr_v8` |
+| Copy-control | `outputs/baselines/copy_control/diet` | `outputs/baselines/copy_control/crispr` |
+| PhenDiff | `outputs/baselines/phendiff/diet` | `outputs/baselines/phendiff/crispr` |
+| IMPA | `outputs/baselines/impa/diet` | `outputs/baselines/impa/crispr` |
+| StarGAN | `outputs/baselines/stargan/diet` | `outputs/baselines/stargan/crispr` |
+| MorphoDiff | `outputs/baselines/morphodiff/diet` | `outputs/baselines/morphodiff/crispr` |
+| No-control diffusion/FM | `outputs/baselines/no_control_fm/diet` | `outputs/baselines/no_control_fm/crispr` |
 
 Existing proposed-method runs remain:
 
 | Benchmark | Proposed output |
 |---|---|
-| Diet | `outputs/diet_id_v3` |
-| CRISPR | `outputs/cellflux_pm_train_id_v8` |
+| Diet | `outputs/runs/diet/main` |
+| CRISPR | `outputs/runs/crispr/main` |
 
-Existing shared-panel baselines remain where they were trained, but manuscript
-tables should refer to them by method name, not by run-directory name:
+Shared-panel CellFlux baselines, when included, should use the same public
+baseline namespace rather than internal training run names:
 
-| Baseline role | Existing output |
+| Baseline role | Output |
 |---|---|
-| Diet shared-panel CellFlux | `outputs/diet_id_v1` |
-| CRISPR shared-panel CellFlux | `outputs/cellflux_pm_train_id_v7` |
+| Diet shared-panel CellFlux | `outputs/baselines/cellflux/diet` |
+| CRISPR shared-panel CellFlux | `outputs/baselines/cellflux/crispr` |
 
 ## Shared exported data
 
@@ -99,14 +99,14 @@ External methods should train/evaluate from exported panels under:
 
 ```text
 outputs/baselines/_data/
-  diet_v3/
+  diet/
     imagefolder/
     impa_npy/
     metadata.csv
     impa_index.csv
     conditions.json
     manifest.json
-  crispr_v8/
+  crispr/
     ...
 ```
 
@@ -116,37 +116,28 @@ Create these exports with:
 bash baselines/export_all_baseline_data.sh
 ```
 
-Run the full resumable paper-baseline queue with:
+Run the paper-baseline queue with:
 
 ```bash
-bash baselines/run_paper_baselines_detached.sh
-
-# foreground / debugging:
 bash baselines/run_paper_baselines.sh
 
 # optional: increase export parallelism for large image panels
-EXPORT_WORKERS=16 bash baselines/run_paper_baselines_detached.sh
+EXPORT_WORKERS=16 bash baselines/run_paper_baselines.sh
 ```
 
 This runs only non-proposed baselines: shared exports, copy-control, PhenDiff,
 IMPA, and StarGAN for each benchmark, then collects table rows. It skips any
 method/benchmark that already has `aggregate_eval_summary.json`.
 
-Run the first executable external adapters only when debugging a narrower queue:
+Run individual external adapters when debugging a narrower queue:
 
 ```bash
-bash baselines/run_primary_baselines_diet_detached.sh
-
-# or foreground:
-PHENDIFF_EPOCHS=8 IMPA_EPOCHS=8 bash baselines/run_primary_baselines_diet.sh
-
-# individual methods:
-BENCHMARK=diet_v3 bash baselines/run_phendiff.sh
-BENCHMARK=diet_v3 bash baselines/run_impa.sh
-BENCHMARK=diet_v3 bash baselines/run_stargan.sh
+BENCHMARK=diet bash baselines/run_phendiff.sh
+BENCHMARK=diet bash baselines/run_impa.sh
+BENCHMARK=diet bash baselines/run_stargan.sh
 ```
 
-Switch `BENCHMARK=crispr_v8` for the CRISPR task after the diet adapters are
+Switch `BENCHMARK=crispr` for the CRISPR task after the diet adapters are
 validated.
 
 After each external baseline is evaluated with `scripts/aggregate_eval.py`, collect

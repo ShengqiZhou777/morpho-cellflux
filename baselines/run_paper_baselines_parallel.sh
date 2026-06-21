@@ -23,8 +23,8 @@ IMPA_EPOCHS="${IMPA_EPOCHS:-8}"
 PHENDIFF_BATCH="${PHENDIFF_BATCH:-32}"    # single-GPU == 2-GPU(batch16) global batch
 IMPA_BATCH="${IMPA_BATCH:-16}"
 # Lane assignment: "<gpu>:<benchmark>" pairs.
-LANE0="${LANE0:-0:diet_v3}"
-LANE1="${LANE1:-1:crispr_v8}"
+LANE0="${LANE0:-0:diet}"
+LANE1="${LANE1:-1:crispr}"
 RUN_ID="${BASELINE_RUN_ID:-$(date -u +%Y%m%dT%H%M%SZ)-$$}"
 STATUS_ROOT="$PROJECT/outputs/baselines/logs/status"
 STATUS_DIR="$STATUS_ROOT/$RUN_ID"
@@ -102,8 +102,8 @@ PY
 
 benchmark_config() {
   case "$1" in
-    diet_v3) echo "configs/diet_id_v3.yaml" ;;
-    crispr_v8) echo "configs/perturbmulti_train_id.yaml" ;;
+    diet) echo "configs/diet_id.yaml" ;;
+    crispr) echo "configs/perturbmulti_train_id.yaml" ;;
     *) echo "Unknown benchmark: $1" >&2; return 2 ;;
   esac
 }

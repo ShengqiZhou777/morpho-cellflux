@@ -28,6 +28,7 @@ from PIL import Image
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+# Legacy fallback only; public configs should define `channels`.
 DEFAULT_CHANNELS = [5, 9, 10]
 _WORKER_IMAGE_DIR: Path | None = None
 _WORKER_OUTPUT_DIR: Path | None = None

@@ -14,20 +14,18 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 
 DEFAULT_RUNS = {
     "diet": {
-        "CellFlux-shared": ["outputs/runs/diet/diet_id_v1", "outputs/diet_id_v1"],
-        "Morpho-CellFlux": ["outputs/runs/diet/diet_id_v3", "outputs/diet_id_v3"],
-        "PhenDiff": "outputs/baselines/phendiff/diet_v3",
-        "IMPA": "outputs/baselines/impa/diet_v3",
-        "MorphoDiff": "outputs/baselines/morphodiff/diet_v3",
-        "StarGAN": "outputs/baselines/stargan/diet_v3",
+        "Morpho-CellFlux": "outputs/runs/diet/main",
+        "PhenDiff": "outputs/baselines/phendiff/diet",
+        "IMPA": "outputs/baselines/impa/diet",
+        "MorphoDiff": "outputs/baselines/morphodiff/diet",
+        "StarGAN": "outputs/baselines/stargan/diet",
     },
     "crispr": {
-        "CellFlux-shared": ["outputs/runs/crispr/cellflux_pm_train_id_v7", "outputs/cellflux_pm_train_id_v7"],
-        "Morpho-CellFlux": ["outputs/runs/crispr/cellflux_pm_train_id_v8", "outputs/cellflux_pm_train_id_v8"],
-        "PhenDiff": "outputs/baselines/phendiff/crispr_v8",
-        "IMPA": "outputs/baselines/impa/crispr_v8",
-        "MorphoDiff": "outputs/baselines/morphodiff/crispr_v8",
-        "StarGAN": "outputs/baselines/stargan/crispr_v8",
+        "Morpho-CellFlux": "outputs/runs/crispr/main",
+        "PhenDiff": "outputs/baselines/phendiff/crispr",
+        "IMPA": "outputs/baselines/impa/crispr",
+        "MorphoDiff": "outputs/baselines/morphodiff/crispr",
+        "StarGAN": "outputs/baselines/stargan/crispr",
     },
 }
 

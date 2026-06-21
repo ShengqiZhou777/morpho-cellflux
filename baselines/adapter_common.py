@@ -19,6 +19,7 @@ from PIL import Image
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+# Legacy fallback only; public configs should define `channels`.
 DEFAULT_CHANNELS = [5, 9, 10]
 
 

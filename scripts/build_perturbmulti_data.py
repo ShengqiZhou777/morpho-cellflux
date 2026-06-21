@@ -6,12 +6,12 @@ Produces, under data/processed/perturbmulti/:
                              SPLIT = {train->train, val->test}: original `val` becomes
                              the in-loop eval fold (the engine only reads train/test).
   index_train_heldout.csv    Same genes, original `test` split only -- final held-out eval.
-  index_eval_leadgenes.csv   Figure/interpolation subset: lead genes spanning the 3 panel
-                             channels (Pten/Eif2s1 -> Perilipin, Atp2a2 -> Calreticulin,
-                             Cdc37/Tsc1 -> pS6RP). Same {train->train, val->test} mapping.
+  index_eval_leadgenes.csv   Figure/interpolation subset: lead genes spanning the active
+                             CRISPR panel (Alb/Rab7/Perilipin). Same {train->train,
+                             val->test} mapping.
   perturbation_effects.csv   per-gene morphological |z| (18ch protein) + RNA SNR diagnostic.
   channel_effects.csv        per-channel (18) effect ranking -> evidence for the image panel.
-  panel_effects.csv          per-gene effect restricted to panel2 [5,9,10].
+  panel_effects.csv          per-gene effect restricted to the active CRISPR panel.
 
 The gene-identity embedding (embedding_gene_identity.csv) is built SEPARATELY and is NOT
 written here. There is no builder for it in this repo -- do not delete it.
@@ -49,13 +49,12 @@ RNA_SNR_MIN = 0.3  # perturbation-VALIDITY gate: drop treated genes whose sgRNA 
                    # (filters on the perturbation input, NOT the morphology readout scored).
 TOP_K = 50      # focus-set size for the diagnostic effect table (cf. eval_panel n=50)
 LIPID_Z = 0.5   # |Perilipin z| to flag a lipid-droplet hit (diagnostic only)
-PANEL_CHANNELS = [5, 9, 10]  # Perilipin, Calreticulin, pS6RP
+PANEL_CHANNELS = [0, 14, 5]  # Alb, Rab7, Perilipin
 
-# Lead genes for the qualitative interpolation figure: at least one per panel channel so
-# the single interpolation eval batch always lands on genes with real signal.
-#   Pten, Eif2s1 -> Perilipin (steatosis);  Atp2a2 -> Calreticulin (UPR);
-#   Cdc37, Tsc1  -> pS6RP (mTOR).  Pten also moves pS6RP.
-LEAD_GENES = ["Atp2a2", "Cdc37", "Eif2s1", "Pten", "Tsc1"]
+# Lead genes for the qualitative interpolation figure: at least one per active
+# CRISPR panel channel so the eval batch lands on genes with real signal.
+#   Alb/Apc -> Alb; Prkar1a/Npc1 -> Rab7; Pten/Eif2s1/Insig1 -> Perilipin.
+LEAD_GENES = ["Alb", "Apc", "Eif2s1", "Insig1", "Npc1", "Prkar1a", "Pten"]
 
 # Split maps. The engine only iterates the 'train' and 'test' folds, so the original
 # three-way split is folded as: train -> training fold, val -> in-loop eval fold,
@@ -210,12 +209,12 @@ def main():
     chan.index.name = "channel"
     chan.to_csv(os.path.join(OUT, "channel_effects.csv"))
     print(f"\nchannel_effects.csv: 18 channels ranked by max|z| over "
-          f"{len(zrows)} genes (>=50 train cells). current panel npz[5,9,10]:")
+          f"{len(zrows)} genes (>=50 train cells). active CRISPR panel npz{PANEL_CHANNELS}:")
     print(chan.to_string(float_format=lambda x: f"{x:.2f}"))
 
     # ---- 5. per-gene panel-only effect table (diagnostic) -------------------
-    #        Effect restricted to the 3 panel channels. Kept as evidence for which
-    #        genes carry visible signal in panel2; NOT used to subset training.
+    #        Effect restricted to the 3 active panel channels. Kept as evidence for
+    #        which genes carry visible signal; NOT used to subset training.
     panel_names = [prot_ch[i] for i in PANEL_CHANNELS]
     panel_rows = []
     for g in pert_genes:
@@ -236,7 +235,7 @@ def main():
         panel_rows.append(rec)
     panel_eff = pd.DataFrame(panel_rows).sort_values("panel_maxabs_z", ascending=False)
     panel_eff.to_csv(os.path.join(OUT, "panel_effects.csv"), index=False)
-    print(f"\npanel_effects.csv: {len(panel_eff)} genes ranked by panel2 max|z|.")
+    print(f"\npanel_effects.csv: {len(panel_eff)} genes ranked by active-panel max|z|.")
 
 
 if __name__ == "__main__":

@@ -11,11 +11,11 @@ the table is apples-to-apples by construction.
 
 Example:
   OMP_NUM_THREADS=4 CUDA_VISIBLE_DEVICES=0 python baselines/build_comparison_table.py \
-      --benchmark diet_v3 --config configs/diet_id_v3.yaml \
-      --real-dir outputs/baselines/_data/diet_v3/imagefolder/test \
-      --classifier outputs/baselines/moa/diet_v3/classifier.pth \
-      --cap 500 --out-dir outputs/baselines/_tables/diet_v3 \
-      --methods "copy_control:outputs/baselines/copy_control/diet_v3/fid_samples/epoch-0,phendiff:outputs/baselines/phendiff/diet_v3/fid_samples/epoch-0,proposed_ep9:outputs/diet_id_v3/fid_samples/epoch-9"
+      --benchmark diet --config configs/diet_id.yaml \
+      --real-dir outputs/baselines/_data/diet/imagefolder/test \
+      --classifier outputs/baselines/moa/diet/classifier.pth \
+      --cap 500 --out-dir outputs/baselines/_tables/diet \
+      --methods "copy_control:outputs/baselines/copy_control/diet/fid_samples/epoch-0,phendiff:outputs/baselines/phendiff/diet/fid_samples/epoch-0,morpho_cellflux:outputs/runs/diet/main/fid_samples/epoch-12"
 """
 from __future__ import annotations
 

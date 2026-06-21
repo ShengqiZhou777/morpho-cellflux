@@ -115,8 +115,8 @@ already active.
 Diet:
 
 ```bash
-OUT=outputs/runs/diet/diet_id_v3 \
-CONFIG=diet_id_v3 DATASET=diet_id \
+OUT=outputs/runs/diet/main \
+CONFIG=diet_id DATASET=diet_id \
 EPOCHS=12 EVAL_FREQ=2 FID_SAMPLES=5120 \
 NPROC=2 BATCH=16 USE_INITIAL=1 CFG=0.2 \
 bash scripts/train.sh
@@ -125,7 +125,7 @@ bash scripts/train.sh
 CRISPR:
 
 ```bash
-OUT=outputs/runs/crispr/cellflux_pm_train_id_v8 \
+OUT=outputs/runs/crispr/main \
 CONFIG=perturbmulti_train_id DATASET=perturbmulti_id \
 EPOCHS=20 EVAL_FREQ=5 FID_SAMPLES=5120 \
 NPROC=2 BATCH=16 USE_INITIAL=1 CFG=0.2 \
@@ -143,18 +143,18 @@ make smoke
 Aggregate marker-distribution and direction metrics:
 
 ```bash
-python scripts/aggregate_eval.py outputs/runs/diet/diet_id_v3 5 9
-python scripts/aggregate_eval.py outputs/runs/crispr/cellflux_pm_train_id_v8 5 19
+python scripts/aggregate_eval.py outputs/runs/diet/main 5 9
+python scripts/aggregate_eval.py outputs/runs/crispr/main 5 19
 ```
 
 Diet marker distribution figure:
 
 ```bash
 python scripts/diet_marker_distribution_figure.py \
-  --run-dir outputs/runs/diet/diet_id_v3_fid5k \
+  --run-dir outputs/runs/diet/fid5k \
   --epoch 12 \
   --out-dir outputs/figures/diet \
-  --prefix diet_v3_fid5k
+  --prefix diet_fid5k
 ```
 
 CellFlux-style method comparison tables use the matched-N tooling under
@@ -178,7 +178,7 @@ The current Diet 5K comparison shows why FID is not sufficient here:
 | copy_control | **7.96** | **12.01** | **0.0039** | **0.0057** | 49.92 |
 | PhenDiff | 10.92 | 13.97 | 0.0066 | 0.0075 | 60.69 |
 | IMPA | 52.29 | 55.43 | 0.0407 | 0.0424 | **63.97** |
-| proposed ep12 5K | 31.26 | 35.43 | 0.0267 | 0.0291 | 54.93 |
+| Morpho-CellFlux | 31.26 | 35.43 | 0.0267 | 0.0291 | 54.93 |
 
 Copy-control wins FID/KID because same-batch control images are realistic, even
 though they do not apply the perturbation. The proposed model's positive signal

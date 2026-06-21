@@ -3,8 +3,7 @@
 # NOT a transcriptional readout. Trains on the rna_snr-filtered gene set (TIER1/2 with
 # confirmed knockdown, ~76 target genes) + control.
 # Image panel = channels [0,14,5] = Alb / Rab7 / Perilipin: the broadest/strongest per-gene
-# image responders to the CRISPR set (18-channel effect scan, this session). Replaces the
-# legacy [5,9,10] panel whose Calreticulin responds to only 1 gene (Sel1l).
+# image responders to the CRISPR set (18-channel effect scan).
 task_name: perturbmulti_train_id
 
 ood_set: Null

@@ -6,8 +6,8 @@ from pathlib import Path
 # Perturb-Multi hepatocyte multi-pathway panel: channel indices into the
 # 18-channel npz (var order: Alb0, polyT1, rRNA2, M6PR3, CathB4, Perilipin5,
 # Sqstm1 6, LC3b7, TOMM20 8, Calreticulin9, pS6RP10, ...).
-# Selected panel = Perilipin(5, lipid), Calreticulin(9, UPR), pS6RP(10, mTOR):
-# the strongest/cleanest discriminative channels (dropped generic-abundance polyT).
+# Legacy fallback panel for configs without an explicit `channels` field.
+# Public configs pin their own panels in YAML.
 PERTURBMULTI_CHANNELS = [5, 9, 10]
 
 

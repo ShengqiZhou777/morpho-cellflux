@@ -17,17 +17,25 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from scipy.stats import pearsonr
 
-CH = ["Perilipin", "Calreticulin", "pS6RP"]
-
 
 def main():
     run = sys.argv[1].rstrip("/")
     min_n = int(sys.argv[2]) if len(sys.argv) > 2 else 3
     g = pd.read_csv(f"{run}/aggregate_eval_by_gene.csv").set_index("gene")
     g = g[g["n"] >= min_n]
+    channels = []
+    for col in g.columns:
+        if not col.startswith("tgt_"):
+            continue
+        ch = col[len("tgt_"):]
+        if f"src_{ch}" in g.columns and f"gen_{ch}" in g.columns:
+            channels.append(ch)
+    if not channels:
+        raise SystemExit("No src_/gen_/tgt_ channel triplets found in aggregate_eval_by_gene.csv")
 
-    fig, axes = plt.subplots(1, 3, figsize=(13, 4.4))
-    for ax, ch in zip(axes, CH):
+    fig, axes = plt.subplots(1, len(channels), figsize=(4.4 * len(channels), 4.4))
+    axes = np.atleast_1d(axes)
+    for ax, ch in zip(axes, channels):
         dr = g[f"tgt_{ch}"] - g[f"src_{ch}"]      # real shift
         dg = g[f"gen_{ch}"] - g[f"src_{ch}"]      # generated shift
         r = pearsonr(dr, dg)[0]
