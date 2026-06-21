@@ -17,6 +17,14 @@ torchvision packages first, then run `pip install -e .`.
 
 ## 2. External Data
 
+Raw data are not committed to this repository. Use the public Perturb-Multi
+release and keep the downloaded assets outside git:
+
+- Perturb-Multi paper: https://doi.org/10.1016/j.cell.2025.05.022
+- Cell images: https://huggingface.co/datasets/xingjiepan/PerturbMulti/tree/main
+- Sequencing data: GEO `GSE275483`
+  (https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE275483)
+
 Point the repository to a local Perturb-Multi asset tree:
 
 ```bash

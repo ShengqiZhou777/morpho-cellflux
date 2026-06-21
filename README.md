@@ -82,6 +82,13 @@ somewhere locally and point the repo to it:
 export MORPHO_PHENOTYPING_ROOT=/path/to/morpho-phenotyping
 ```
 
+Public data sources:
+
+- Perturb-Multi paper: https://doi.org/10.1016/j.cell.2025.05.022
+- Cell images: https://huggingface.co/datasets/xingjiepan/PerturbMulti/tree/main
+- Sequencing data: GEO `GSE275483`
+  (https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE275483)
+
 The expected source layout is documented by
 [configs/crispr_hep.yaml](configs/crispr_hep.yaml). The CRISPR data builder
 materializes raw symlinks and derived tables:
