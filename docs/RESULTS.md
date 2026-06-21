@@ -5,6 +5,14 @@ checkpoint epoch, and metric definition** so it is reproducible and honest — n
 is hand-edited. "Best checkpoint" = legitimate selection by the biology metric `gap_closed`
 (never FID; see caveats), exactly as `docs/EXPERIMENTS.md` prescribes.
 
+> **2026-06-21 status note:** these are biology-oriented internal result records, not the
+> final method-ranking table. The current paper story and metric hierarchy are in
+> `docs/SCIENTIFIC_STORY.md` and `docs/EVAL_PROTOCOL.md`: FID/KID/MoA are reported for
+> CellFlux comparability, while Perturb-Multi's primary biological claim is marker
+> distribution transport. The Diet 5K table shows copy-control wins FID/KID, PhenDiff is
+> best nontrivial by FID/KID, and IMPA is best by MoA; the proposed model's current positive
+> evidence is the marker-distribution shift, not superiority under standard image metrics.
+
 Compact paper-table extracts are in `docs/PAPER_TABLE_DATA.md`; the machine-readable TSV is
 `data/reports/paper_table_data.tsv`.
 

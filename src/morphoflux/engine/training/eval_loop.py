@@ -39,6 +39,29 @@ logger = logging.getLogger(__name__)
 PRINT_FREQUENCY = 50
 
 
+def _gather_trt2ctrl_idx(local_mapping: dict) -> dict:
+    """Merge per-rank treated->control mappings before writing eval metadata."""
+    if not distributed_mode.is_dist_avail_and_initialized():
+        return dict(local_mapping)
+
+    gathered = [None for _ in range(distributed_mode.get_world_size())]
+    torch.distributed.all_gather_object(gathered, local_mapping)
+
+    merged = {}
+    for rank, rank_mapping in enumerate(gathered):
+        if not rank_mapping:
+            continue
+        overlap = set(merged).intersection(rank_mapping)
+        if overlap:
+            logger.warning(
+                "Overwriting %d duplicate treated->control mapping keys from rank %d",
+                len(overlap),
+                rank,
+            )
+        merged.update(rank_mapping)
+    return merged
+
+
 class CFGScaledModel(ModelWrapper):
     def __init__(self, model: Module):
         super().__init__(model)
@@ -276,12 +299,17 @@ def eval_model(
     # global-only file makes old epochs' images get re-paired against the newest controls,
     # adding spurious noise to per-epoch Delta-direction. Aggregate eval prefers the
     # per-epoch file (epoch-<e>/trt2ctrl_idx.json) when present.
-    for jpath in (f'{image_dir}/trt2ctrl_idx.json',
-                  f'{image_dir}/epoch-{epoch}/trt2ctrl_idx.json'):
-        os.makedirs(os.path.dirname(jpath), exist_ok=True)
-        with open(jpath, 'w') as f:
-            json.dump(trt2ctrl_idx, f, indent=4)
-            f.flush()
+    merged_trt2ctrl_idx = _gather_trt2ctrl_idx(trt2ctrl_idx)
+    if distributed_mode.is_main_process():
+        for jpath in (f'{image_dir}/trt2ctrl_idx.json',
+                      f'{image_dir}/epoch-{epoch}/trt2ctrl_idx.json'):
+            os.makedirs(os.path.dirname(jpath), exist_ok=True)
+            with open(jpath, 'w') as f:
+                json.dump(merged_trt2ctrl_idx, f, indent=4)
+                f.flush()
+        logger.info("Saved %d treated->control mappings", len(merged_trt2ctrl_idx))
+    if distributed_mode.is_dist_avail_and_initialized():
+        torch.distributed.barrier()
     return {"fid": float(fid_metric.compute().detach().cpu())}
 
 

@@ -4,12 +4,12 @@ Phase running the Perturb-Multi hepatocyte data through the CellFlux engine (abs
 into this repo as `morphoflux.engine`; see docs/ARCHITECTURE.md) with the corrected
 perturbation semantics.
 
-Dates: 2026-06-17 to 2026-06-19.
+Dates: 2026-06-17 to 2026-06-21.
 
-> **Current state is the "2026-06-19 (session 2)" section at the bottom.** It supersedes the
-> image-panel, index-size, active-runs, and genome-wide Perturb-seq statements above wherever
-> they conflict (channels are now per-dataset & config-driven; `index_train` is rna_snr-filtered
-> to 76 genes; GSE275483 is unusable for signatures).
+> **Current state is the "2026-06-21 (session 5)" section at the bottom.** It supersedes the
+> older image-panel, index-size, active-runs, metric-priority, and story statements above wherever
+> they conflict. The current story is marker phenotype transport on multiplexed molecular readouts,
+> with FID/KID used for comparability rather than as the primary biological success criterion.
 
 ## Modality Flow (Pinned)
 
@@ -439,3 +439,143 @@ strong, MoA works); **CRISPR** as the harder genetic secondary (RxRx1-analog, di
 only). Two viable framings depending on whether cfg-tuned proposed becomes competitive:
 **(A)** method paper (proposed beats PhenDiff/IMPA on FIDc/MoA) or **(B)** new in-vivo benchmark
 + honest evaluation study (standard FID misleads on subtle perturbations; copy-control wins FID).
+
+---
+
+## 2026-06-21 (session 5): 5K Diet eval + marker phenotype story
+
+**Why this session.** The generated Diet images look qualitatively promising, but the
+standard CellFlux-style metrics and the Perturb-Multi data type force a sharper story.
+Perturb-Multi images are not ordinary RGB morphology images; the 18-target panel is a
+multiplexed molecular phenotype readout: protein markers of subcellular structures and
+signaling pathways plus abundant RNAs. The paper story should be marker distribution
+transport, not generic photorealistic cell synthesis.
+
+### CellFlux sample-budget check
+
+CellFlux uses large matched sample budgets because FID/KID are sample-size sensitive:
+BBBC021 uses 5120 generated images in the public scripts, RxRx1 uses a much larger
+budget, and MoA evaluation is capped at 5120 generated images. Our original
+`diet_id_v3` eval only generated 1024 PNGs because `scripts/train.sh` defaulted
+`FID_SAMPLES=1024`; Diet has enough held-out cells to run a CellFlux-scale eval.
+
+Diet held-out treated counts are large enough:
+
+| split | adlib | fasted | hfd |
+|---|---:|---:|---:|
+| train | 105243 | 105544 | 97236 |
+| test | 9251 | 9178 | 8647 |
+
+### Proposed Diet 5K eval
+
+Eval-only run:
+
+```text
+checkpoint: outputs/runs/diet/diet_id_v3/checkpoint-11.pth
+output:     outputs/runs/diet/diet_id_v3_fid5k/fid_samples/epoch-12
+config:     configs/diet_id_v3.yaml
+panel:      [9,5,8] = Calreticulin / Perilipin / TOMM20
+fid_samples: 5120
+```
+
+Generated PNG count:
+
+| condition | generated PNGs |
+|---|---:|
+| fasted | 2654 |
+| hfd | 2466 |
+| total | 5120 |
+
+Train-loop eval FID for this eval was **30.5982**.
+
+### Matched Diet 5K baseline table
+
+Fair comparison uses the limiting proposed condition count, cap=2466 per treated
+condition (`N=4932`). Table path:
+`outputs/baselines/_tables/diet_v3_fid5k/comparison_table.md`.
+
+| method | FIDo | FIDc | KIDo | KIDc | MoA-Acc | MoA-MacroF1 | MoA-WeightedF1 |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| copy_control | **7.96** | **12.01** | **0.0039** | **0.0057** | 49.92 | 0.4039 | 0.4039 |
+| phendiff | 10.92 | 13.97 | 0.0066 | 0.0075 | 60.69 | 0.5818 | 0.5818 |
+| impa | 52.29 | 55.43 | 0.0407 | 0.0424 | **63.97** | **0.6383** | **0.6383** |
+| proposed_ep12_5k | 31.26 | 35.43 | 0.0267 | 0.0291 | 54.93 | 0.4859 | 0.4859 |
+
+Readout:
+
+- Copy-control has the best FID/KID, so FID/KID are rewarding same-batch image realism
+  and can rank the no-perturbation null highest.
+- PhenDiff is the best nontrivial method by FID/KID in this table.
+- IMPA is best by MoA.
+- The proposed model is not currently the winner under CellFlux-style image metrics.
+
+This rules out an overclaim like "our method is best by FID/MoA." The usable
+scientific claim is narrower and stronger: the model can move marker distributions
+toward the target perturbation, even when generic image-realism metrics do not reward it.
+
+### Marker distribution evidence
+
+Reusable script added:
+
+```text
+python scripts/diet_marker_distribution_figure.py \
+  --run-dir outputs/runs/diet/diet_id_v3_fid5k \
+  --epoch 12 \
+  --out-dir outputs/figures/diet \
+  --prefix diet_v3_fid5k
+```
+
+Outputs:
+
+```text
+outputs/figures/diet/diet_v3_fid5k_marker_distributions.png
+outputs/figures/diet/diet_v3_fid5k_mean_shift.png
+outputs/figures/diet/diet_v3_fid5k_marker_distribution_summary.csv
+outputs/figures/diet/diet_v3_fid5k_marker_distribution_summary.json
+```
+
+Generated-vs-target foreground marker means from all 5120 generated PNGs:
+
+| condition | marker | generated | target | generated-target | read |
+|---|---|---:|---:|---:|---|
+| fasted | Calreticulin | 0.3715 | 0.3528 | +0.0187 | slight overshoot |
+| fasted | Perilipin | 0.3208 | 0.3123 | +0.0085 | slight overshoot |
+| fasted | TOMM20 | 0.4115 | 0.4122 | -0.0007 | close |
+| hfd | Calreticulin | 0.4213 | 0.4173 | +0.0040 | close |
+| hfd | Perilipin | 0.3514 | 0.3555 | -0.0041 | close |
+| hfd | TOMM20 | 0.4235 | 0.4423 | -0.0189 | under-shift |
+
+This is the current positive result: the HFD Calreticulin and Perilipin
+distributions move close to the treated state; TOMM20 moves in the right direction
+but remains under-shifted. For fasted, TOMM20 is close, while Calreticulin and
+Perilipin slightly overshoot.
+
+### DDP mapping caveat and fix
+
+The 2-GPU 5K eval saved 5120 PNGs, but `trt2ctrl_idx.json` contained only 2560
+treated->control mappings because each rank wrote the JSON independently and one
+rank overwrote the other. This affects paired control/gen/target analyses and
+control-normalized `gap_closed`, but not the generated-vs-target marker-distribution
+check above.
+
+Code fix made in `src/morphoflux/engine/training/eval_loop.py`: gather
+per-rank `trt2ctrl_idx` dictionaries with `torch.distributed.all_gather_object`,
+merge them, and write the global/per-epoch JSON only from the main process. Future
+DDP evals should have mapping count equal to PNG count. Rerun Diet 5K after this
+fix if fully rigorous paired gap-closure is needed for the figure/table.
+
+### Story decision
+
+Current paper framing:
+
+```text
+Morpho-CellFlux adapts CellFlux-style conditional transport to Perturb-Multi
+hepatocyte multiplexed marker images. The primary endpoint is whether generated
+marker distributions move from control toward real perturbation states.
+```
+
+Do not frame the project as ordinary morphology photorealism. Do not select or
+claim success by FID alone. The Diet result supports marker distribution migration;
+the mean image figure suggests spatial morphology is still imperfect and should
+not be overclaimed. CRISPR remains the clean genetic setting but should be shown
+with distribution-level panels because single-gene shifts are weak.
