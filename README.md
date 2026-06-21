@@ -86,8 +86,11 @@ Public data sources:
 
 - Perturb-Multi paper: https://doi.org/10.1016/j.cell.2025.05.022
 - Cell images: https://huggingface.co/datasets/xingjiepan/PerturbMulti/tree/main
-- Sequencing data: GEO `GSE275483`
-  (https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE275483)
+
+This pipeline does not require the GEO raw sequencing release. It uses the
+paired image/protein/RNA assets from Perturb-Multi; the RNA h5ad is treated as a
+MERFISH readout for filtering/diagnostics and optional ablation, not as the main
+generative condition.
 
 The expected source layout is documented by
 [configs/crispr_hep.yaml](configs/crispr_hep.yaml). The CRISPR data builder

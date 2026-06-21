@@ -53,8 +53,9 @@ raw assets (morpho-phenotyping)               external h5ad (RNA/protein) + mani
   Calreticulin / Perilipin / TOMM20; CRISPR uses `[0,14,5]` =
   Alb / Rab7 / Perilipin. The legacy fallback panel `[5,9,10]` is kept only for
   older configs without an explicit `channels` field.
-- Genome-wide Perturb-seq (GSE275483) = adjacent sections; a possible future *rich*
-  condition. The 209-MERFISH and genome-wide data are different things.
+- Raw sequencing/GEO files are not required for the current pipeline. The
+  paired RNA h5ad is a MERFISH readout used for filtering/diagnostics and the
+  optional RNA-signature ablation; the main model condition remains gene identity.
 
 ## How to run
 ```bash
