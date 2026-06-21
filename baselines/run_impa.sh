@@ -32,6 +32,39 @@ if [[ ! -f "$DATA_DIR/manifest.json" ]]; then
   exit 2
 fi
 
+python - <<'PY'
+from pathlib import Path
+import os
+import torch
+from torch.hub import load_state_dict_from_url
+
+url = "https://github.com/mseitzer/pytorch-fid/releases/download/fid_weights/pt_inception-2015-12-05-6726825d.pth"
+name = url.rsplit("/", 1)[-1]
+torch_home = Path(os.environ.get("TORCH_HOME", Path.home() / ".cache" / "torch"))
+cache_dir = torch_home / "hub" / "checkpoints"
+cache_dir.mkdir(parents=True, exist_ok=True)
+cache_path = cache_dir / name
+
+
+def valid(path: Path) -> bool:
+    try:
+        state = torch.load(path, map_location="cpu")
+    except Exception as exc:
+        print(f"IMPA FID cache invalid: {path} ({exc})")
+        return False
+    return isinstance(state, dict) and len(state) > 0
+
+
+if cache_path.exists() and not valid(cache_path):
+    cache_path.unlink()
+if not cache_path.exists():
+    print(f"Downloading IMPA FID Inception weights to {cache_path}")
+    load_state_dict_from_url(url, progress=True)
+if not valid(cache_path):
+    raise SystemExit(f"IMPA FID cache is still invalid after refresh: {cache_path}")
+print(f"IMPA FID cache ok: {cache_path}")
+PY
+
 CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-0,1}" python "$REPO_ROOT/baselines/impa_train.py" \
   --config "$CONFIG" \
   --data-dir "outputs/baselines/_data/$BENCHMARK" \

@@ -14,22 +14,32 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 
 DEFAULT_RUNS = {
     "diet": {
-        "CellFlux-shared": "outputs/diet_id_v1",
-        "Morpho-CellFlux": "outputs/diet_id_v3",
+        "CellFlux-shared": ["outputs/runs/diet/diet_id_v1", "outputs/diet_id_v1"],
+        "Morpho-CellFlux": ["outputs/runs/diet/diet_id_v3", "outputs/diet_id_v3"],
         "PhenDiff": "outputs/baselines/phendiff/diet_v3",
         "IMPA": "outputs/baselines/impa/diet_v3",
         "MorphoDiff": "outputs/baselines/morphodiff/diet_v3",
         "StarGAN": "outputs/baselines/stargan/diet_v3",
     },
     "crispr": {
-        "CellFlux-shared": "outputs/cellflux_pm_train_id_v7",
-        "Morpho-CellFlux": "outputs/cellflux_pm_train_id_v8",
+        "CellFlux-shared": ["outputs/runs/crispr/cellflux_pm_train_id_v7", "outputs/cellflux_pm_train_id_v7"],
+        "Morpho-CellFlux": ["outputs/runs/crispr/cellflux_pm_train_id_v8", "outputs/cellflux_pm_train_id_v8"],
         "PhenDiff": "outputs/baselines/phendiff/crispr_v8",
         "IMPA": "outputs/baselines/impa/crispr_v8",
         "MorphoDiff": "outputs/baselines/morphodiff/crispr_v8",
         "StarGAN": "outputs/baselines/stargan/crispr_v8",
     },
 }
+
+
+def resolve_run(spec: str | list[str]) -> tuple[Path, str]:
+    candidates = [spec] if isinstance(spec, str) else spec
+    for rel in candidates:
+        run_dir = REPO_ROOT / rel
+        if (run_dir / "aggregate_eval_summary.json").exists():
+            return run_dir, rel
+    rel = candidates[0]
+    return REPO_ROOT / rel, rel
 
 
 def read_summary(run_dir: Path) -> dict | None:
@@ -41,8 +51,9 @@ def read_summary(run_dir: Path) -> dict | None:
 
 def diet_rows(runs: dict[str, str]) -> list[dict]:
     rows = []
-    for method, rel in runs.items():
-        summary = read_summary(REPO_ROOT / rel)
+    for method, spec in runs.items():
+        run_dir, rel = resolve_run(spec)
+        summary = read_summary(run_dir)
         if summary is None or "per_condition_dist" not in summary:
             rows.append({"method": method, "run": rel, "status": "missing"})
             continue
@@ -64,8 +75,9 @@ def diet_rows(runs: dict[str, str]) -> list[dict]:
 
 def crispr_rows(runs: dict[str, str]) -> list[dict]:
     rows = []
-    for method, rel in runs.items():
-        summary = read_summary(REPO_ROOT / rel)
+    for method, spec in runs.items():
+        run_dir, rel = resolve_run(spec)
+        summary = read_summary(run_dir)
         if summary is None or "dist_pooled" not in summary:
             rows.append({"method": method, "run": rel, "status": "missing"})
             continue

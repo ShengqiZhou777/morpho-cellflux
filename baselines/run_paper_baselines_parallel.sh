@@ -25,6 +25,10 @@ IMPA_BATCH="${IMPA_BATCH:-16}"
 # Lane assignment: "<gpu>:<benchmark>" pairs.
 LANE0="${LANE0:-0:diet_v3}"
 LANE1="${LANE1:-1:crispr_v8}"
+RUN_ID="${BASELINE_RUN_ID:-$(date -u +%Y%m%dT%H%M%SZ)-$$}"
+STATUS_ROOT="$PROJECT/outputs/baselines/logs/status"
+STATUS_DIR="$STATUS_ROOT/$RUN_ID"
+STATUS_JSON="$PROJECT/outputs/baselines/logs/paper_baselines_parallel_status.json"
 
 # Concurrency hardening (two PhenDiff jobs at once previously raced on startup
 # network calls and a shared accelerate rendezvous port):
@@ -37,7 +41,64 @@ export HF_HUB_DISABLE_TELEMETRY=1
 export GIT_TERMINAL_PROMPT=0
 LANE_STAGGER_SECONDS="${LANE_STAGGER_SECONDS:-120}"
 
+mkdir -p "$STATUS_DIR"
+
 summary_exists() { [[ -f "$PROJECT/$1/aggregate_eval_summary.json" ]]; }
+
+record_status() {
+  local benchmark="$1" method="$2" status="$3" message="${4:-}" code="${5:-0}" gpu="${6:-}"
+  local lane_key="${gpu:-cpu}"
+  python - "$STATUS_DIR/${benchmark}_${method}_${lane_key}.json" "$benchmark" "$method" "$status" "$message" "$code" "$gpu" <<'PY'
+import json
+import sys
+from datetime import datetime, timezone
+from pathlib import Path
+
+out, benchmark, method, status, message, code, gpu = sys.argv[1:8]
+Path(out).write_text(json.dumps({
+    "time": datetime.now(timezone.utc).isoformat(),
+    "benchmark": benchmark,
+    "method": method,
+    "status": status,
+    "message": message,
+    "exit_code": int(code),
+    "gpu": gpu or None,
+}, indent=2) + "\n")
+PY
+}
+
+write_status_json() {
+  local final_rc="$1" lane0_rc="${2:-}" lane1_rc="${3:-}" collect_rc="${4:-}"
+  python - "$STATUS_JSON" "$STATUS_DIR" "$RUN_ID" "$final_rc" "$lane0_rc" "$lane1_rc" "$collect_rc" <<'PY'
+import json
+import sys
+from datetime import datetime, timezone
+from pathlib import Path
+
+out, status_dir, run_id, final_rc, lane0_rc, lane1_rc, collect_rc = sys.argv[1:8]
+status_path = Path(status_dir)
+records = []
+if status_path.exists():
+    for path in sorted(status_path.glob("*.json")):
+        records.append(json.loads(path.read_text()))
+failed = [r for r in records if r.get("status") == "failed"]
+payload = {
+    "run_id": run_id,
+    "generated_at": datetime.now(timezone.utc).isoformat(),
+    "ok": int(final_rc) == 0 and not failed,
+    "final_exit_code": int(final_rc),
+    "lane_exit_codes": {
+        "lane0": None if lane0_rc == "" else int(lane0_rc),
+        "lane1": None if lane1_rc == "" else int(lane1_rc),
+    },
+    "collect_exit_code": None if collect_rc == "" else int(collect_rc),
+    "status_dir": str(status_path),
+    "records": records,
+}
+Path(out).write_text(json.dumps(payload, indent=2) + "\n")
+print(f"wrote {out}")
+PY
+}
 
 benchmark_config() {
   case "$1" in
@@ -81,43 +142,87 @@ lane() {
   local spec="$1" gpu benchmark
   gpu="${spec%%:*}"
   benchmark="${spec#*:}"
+  local lane_rc=0 code=0
   export CUDA_VISIBLE_DEVICES="$gpu"   # subshell-local: pins every step in this lane
   export MAIN_PROCESS_PORT=$((29500 + gpu))   # distinct accelerate rendezvous per lane
 
   echo "[$(date -Is)] [gpu=$gpu] LANE START $benchmark"
 
-  run_copy_control_for "$benchmark"
+  if summary_exists "outputs/baselines/copy_control/$benchmark"; then
+    echo "[$(date -Is)] [gpu=$gpu] SKIP copy_control $benchmark: summary exists"
+    record_status "$benchmark" copy_control skipped "summary exists" 0 "$gpu"
+  elif run_copy_control_for "$benchmark"; then
+    record_status "$benchmark" copy_control complete "completed" 0 "$gpu"
+  else
+    code=$?
+    echo "[$(date -Is)] [gpu=$gpu] FAIL copy_control $benchmark exit=$code"
+    record_status "$benchmark" copy_control failed "copy-control or aggregate_eval failed" "$code" "$gpu"
+    lane_rc=1
+  fi
 
   if summary_exists "outputs/baselines/phendiff/$benchmark"; then
     echo "[$(date -Is)] [gpu=$gpu] SKIP PhenDiff $benchmark: summary exists"
+    record_status "$benchmark" phendiff skipped "summary exists" 0 "$gpu"
   else
     echo "[$(date -Is)] [gpu=$gpu] START PhenDiff $benchmark (NPROC=1 BATCH=$PHENDIFF_BATCH)"
-    NPROC=1 BENCHMARK="$benchmark" EPOCHS="$PHENDIFF_EPOCHS" BATCH="$PHENDIFF_BATCH" \
-      bash baselines/run_phendiff.sh \
-      || echo "[$(date -Is)] [gpu=$gpu] FAIL PhenDiff $benchmark"
+    if NPROC=1 BENCHMARK="$benchmark" EPOCHS="$PHENDIFF_EPOCHS" BATCH="$PHENDIFF_BATCH" \
+      bash baselines/run_phendiff.sh; then
+      record_status "$benchmark" phendiff complete "completed" 0 "$gpu"
+    else
+      code=$?
+      echo "[$(date -Is)] [gpu=$gpu] FAIL PhenDiff $benchmark exit=$code"
+      record_status "$benchmark" phendiff failed "run_phendiff.sh failed" "$code" "$gpu"
+      lane_rc=1
+    fi
   fi
 
   if summary_exists "outputs/baselines/impa/$benchmark"; then
     echo "[$(date -Is)] [gpu=$gpu] SKIP IMPA $benchmark: summary exists"
+    record_status "$benchmark" impa skipped "summary exists" 0 "$gpu"
   else
     echo "[$(date -Is)] [gpu=$gpu] START IMPA $benchmark (BATCH=$IMPA_BATCH)"
-    BENCHMARK="$benchmark" EPOCHS="$IMPA_EPOCHS" BATCH="$IMPA_BATCH" DEVICES=1 \
-      bash baselines/run_impa.sh \
-      || echo "[$(date -Is)] [gpu=$gpu] FAIL IMPA $benchmark"
+    if BENCHMARK="$benchmark" EPOCHS="$IMPA_EPOCHS" BATCH="$IMPA_BATCH" DEVICES=1 \
+      bash baselines/run_impa.sh; then
+      record_status "$benchmark" impa complete "completed" 0 "$gpu"
+    else
+      code=$?
+      echo "[$(date -Is)] [gpu=$gpu] FAIL IMPA $benchmark exit=$code"
+      record_status "$benchmark" impa failed "run_impa.sh failed" "$code" "$gpu"
+      lane_rc=1
+    fi
   fi
 
-  echo "[$(date -Is)] [gpu=$gpu] LANE DONE $benchmark"
+  echo "[$(date -Is)] [gpu=$gpu] LANE DONE $benchmark exit=$lane_rc"
+  return "$lane_rc"
 }
 
 echo "[$(date -Is)] START parallel paper baseline queue"
 echo "project=$PROJECT"
+echo "run_id=$RUN_ID"
 echo "lane0=$LANE0 lane1=$LANE1 include_stargan=$INCLUDE_STARGAN"
 echo "phendiff_epochs=$PHENDIFF_EPOCHS phendiff_batch=$PHENDIFF_BATCH impa_epochs=$IMPA_EPOCHS impa_batch=$IMPA_BATCH"
 
 # Exports are CPU/IO; do them up front so both GPU lanes start clean.
+export_rc=0
 for spec in "$LANE0" "$LANE1"; do
-  ensure_export "${spec#*:}"
+  benchmark="${spec#*:}"
+  if [[ -f "outputs/baselines/_data/$benchmark/manifest.json" ]]; then
+    record_status "$benchmark" export skipped "manifest exists" 0 ""
+    echo "[$(date -Is)] SKIP export $benchmark: manifest exists"
+  elif ensure_export "$benchmark"; then
+    record_status "$benchmark" export complete "completed" 0 ""
+  else
+    code=$?
+    record_status "$benchmark" export failed "export failed" "$code" ""
+    export_rc=1
+  fi
 done
+
+if [[ "$export_rc" -ne 0 ]]; then
+  echo "[$(date -Is)] export failed; not starting GPU lanes"
+  write_status_json 1 "" "" ""
+  exit 1
+fi
 
 lane "$LANE0" &
 p0=$!
@@ -128,5 +233,13 @@ wait "$p0"; r0=$?
 wait "$p1"; r1=$?
 echo "[$(date -Is)] lanes finished: lane0=$r0 lane1=$r1"
 
-python baselines/collect_paper_metrics.py
-echo "[$(date -Is)] DONE parallel paper baseline queue"
+collect_rc=0
+python baselines/collect_paper_metrics.py || collect_rc=$?
+
+final_rc=0
+if [[ "$r0" -ne 0 || "$r1" -ne 0 || "$collect_rc" -ne 0 ]]; then
+  final_rc=1
+fi
+write_status_json "$final_rc" "$r0" "$r1" "$collect_rc"
+echo "[$(date -Is)] DONE parallel paper baseline queue exit=$final_rc"
+exit "$final_rc"
