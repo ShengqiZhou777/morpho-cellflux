@@ -7,7 +7,11 @@
 set -euo pipefail
 
 PROJECT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
-TORCHRUN=${TORCHRUN:-$(command -v torchrun || echo /home/ubuntu/miniconda3/envs/pmf/bin/torchrun)}
+TORCHRUN=${TORCHRUN:-$(command -v torchrun || true)}
+if [[ -z "$TORCHRUN" ]]; then
+  echo "torchrun not found. Activate the project environment or set TORCHRUN=/path/to/torchrun." >&2
+  exit 127
+fi
 
 OUT=${OUT:-$PROJECT_DIR/outputs/perturbmulti_run}
 BATCH=${BATCH:-16}          # per-GPU batch size. 16 uses about 25GB and is safe through FID eval on a 32GB card.

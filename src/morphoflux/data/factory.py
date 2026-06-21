@@ -42,8 +42,18 @@ def _json_safe(value: Any) -> Any:
     return value
 
 
+def _expand_path(path: str | Path) -> Path:
+    expanded = os.path.expandvars(os.path.expanduser(str(path)))
+    if "$" in expanded:
+        raise OSError(
+            f"Unresolved environment variable in path {path!r}. "
+            "Set the variable or replace the path in the config."
+        )
+    return Path(expanded)
+
+
 def _resolve(project_root: Path, path: str | Path) -> Path:
-    p = Path(path)
+    p = _expand_path(path)
     return p if p.is_absolute() else project_root / p
 
 
@@ -65,7 +75,7 @@ class DataFactory:
         paths = config["paths"]
         self.paths = FactoryPaths(
             project_root=root,
-            source_root=Path(paths["source_root"]).resolve(),
+            source_root=_expand_path(paths["source_root"]).resolve(),
             raw_dir=_resolve(root, paths["raw_dir"]),
             processed_dir=_resolve(root, paths["processed_dir"]),
             reports_dir=_resolve(root, paths["reports_dir"]),

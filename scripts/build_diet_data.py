@@ -27,8 +27,14 @@ import pandas as pd
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT = os.path.join(ROOT, "data/processed/diet")
-MANIFEST = ("/home/ubuntu/data/sqzhou/projects/morpho-phenotyping/assets/"
-            "paired_filtered/diet/manifests/manifest_diet_hep_paired.parquet")
+SOURCE_ROOT = os.environ.get(
+    "MORPHO_PHENOTYPING_ROOT",
+    os.path.join(ROOT, "data/source/morpho-phenotyping"),
+)
+MANIFEST = os.path.join(
+    SOURCE_ROOT,
+    "assets/paired_filtered/diet/manifests/manifest_diet_hep_paired.parquet",
+)
 
 CONTROL = "adlib"
 CONDITIONS = ["adlib", "fasted", "hfd"]  # embedding row order

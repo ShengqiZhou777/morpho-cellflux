@@ -1,0 +1,10 @@
+cff-version: 1.2.0
+message: "If you use Morpho-CellFlux, please cite the accompanying paper when it is released and cite this repository."
+title: "Morpho-CellFlux: Conditional Marker Phenotype Transport for Perturb-Multi Hepatocytes"
+authors:
+  - family-names: Zhou
+    given-names: Shengqi
+year: 2026
+repository-code: "https://github.com/ShengqiZhou777/morpho-cellflux"
+url: "https://github.com/ShengqiZhou777/morpho-cellflux"
+license: MIT

@@ -8,9 +8,16 @@
 # Compare aggregate_eval gap_closed: v8 (one-hot) vs this (one-hot + RNA signature).
 set -uo pipefail
 PROJECT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-CONDA_SH="${CONDA_SH:-/home/ubuntu/miniconda3/etc/profile.d/conda.sh}"
+CONDA_ENV="${CONDA_ENV:-morpho-cellflux}"
+if [[ -z "${CONDA_SH:-}" ]]; then
+  if ! command -v conda >/dev/null 2>&1; then
+    echo "conda not found. Set CONDA_SH=/path/to/conda.sh or activate the environment manually." >&2
+    exit 127
+  fi
+  CONDA_SH="$(conda info --base)/etc/profile.d/conda.sh"
+fi
 cd "$PROJECT"
 source "$CONDA_SH"
-conda activate pmf
+conda activate "$CONDA_ENV"
 OUT=outputs/cellflux_pm_train_id_v9 CONFIG=perturbmulti_train_idsig DATASET=perturbmulti_idsig \
   USE_INITIAL=1 CFG=0.2 EPOCHS=20 EVAL_FREQ=5 NPROC=2 BATCH=16 bash scripts/train.sh

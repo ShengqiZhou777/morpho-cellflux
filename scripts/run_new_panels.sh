@@ -9,11 +9,18 @@
 #             + rna_snr-filtered index (76 genes with confirmed knockdown)
 set -uo pipefail
 PROJECT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-CONDA_SH="${CONDA_SH:-/home/ubuntu/miniconda3/etc/profile.d/conda.sh}"
+CONDA_ENV="${CONDA_ENV:-morpho-cellflux}"
+if [[ -z "${CONDA_SH:-}" ]]; then
+  if ! command -v conda >/dev/null 2>&1; then
+    echo "conda not found. Set CONDA_SH=/path/to/conda.sh or activate the environment manually." >&2
+    exit 127
+  fi
+  CONDA_SH="$(conda info --base)/etc/profile.d/conda.sh"
+fi
 cd "$PROJECT"
 LOG="$PROJECT/outputs/run_new_panels.log"
 source "$CONDA_SH"
-conda activate pmf
+conda activate "$CONDA_ENV"
 
 echo "[$(date -Is)] START diet-v3 (channels [9,5,8])" >> "$LOG"
 OUT=outputs/diet_id_v3 CONFIG=diet_id_v3 DATASET=diet_id USE_INITIAL=1 CFG=0.2 \

@@ -14,15 +14,15 @@ edits were made in-place in an external clone and were not tracked anywhere).
 The model architecture, flow-matching training loop, ODE sampler, CFG, and FID are upstream
 and unchanged. We only added a dataset/condition adapter + small fixes:
 
-- `models/model_configs.py` — added the `perturbmulti_id` arch (in/out=3, condition_dim=204
-  gene-identity, attention_resolutions=[4] to fit 32GB, use_checkpoint=False for DDP).
-- `training/data_utils.py` — added `_load_perturbmulti()` + `PERTURBMULTI_CHANNELS=[5,9,10]`
-  (loads our npz, selects Perilipin/Calreticulin/pS6RP, maps [0,1]->[-1,1]). No CellFlux-
-  internal deps.
-- `training/dataloader.py` — added the perturbmulti train/test split branch.
+- `models/model_configs.py` — added Perturb-Multi model configs
+  (`perturbmulti_id`, `perturbmulti_idsig`, `diet_id`) with 3-channel images and
+  task-specific condition dimensions.
+- `training/data_utils.py` — added `_load_perturbmulti()` for npz crops with config-driven
+  channel panels. Active panels are `[9,5,8]` for Diet and `[0,14,5]` for CRISPR.
+- `training/dataloader.py` — added the Perturb-Multi/Diet train/test split branch.
 - `train.py` — added `perturbmulti_id` to the dataset list.
 - `training/eval_loop.py` — write a per-epoch copy of `trt2ctrl_idx.json`
-  (`fid_samples/epoch-<e>/`) so each epoch keeps its own treated->control pairing.
+  (`fid_samples/epoch-<e>/`) and gather mappings across DDP ranks before writing.
 - `training/load_and_save.py` — `torch.load(..., weights_only=False)` for torch 2.11 resume.
 
 ## How it's used
@@ -34,5 +34,5 @@ and unchanged. We only added a dataset/condition adapter + small fixes:
   `configs/`), or accepts an absolute `.yaml` path.
 - Data paths inside those YAMLs point at `data/processed/perturbmulti/` (this repo).
 
-The old external clone at `/home/ubuntu/data/sqzhou/projects/CellFlux` is DEPRECATED —
-do not edit it; this absorbed copy under `src/morphoflux/engine/` is the source of truth.
+Any external CellFlux clone used during development is deprecated for this project. This
+absorbed copy under `src/morphoflux/engine/` is the source of truth.

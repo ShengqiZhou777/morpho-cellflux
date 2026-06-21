@@ -25,7 +25,11 @@
 set -euo pipefail
 
 PROJECT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
-TORCHRUN=${TORCHRUN:-$(command -v torchrun || echo /home/ubuntu/miniconda3/envs/pmf/bin/torchrun)}
+TORCHRUN=${TORCHRUN:-$(command -v torchrun || true)}
+if [[ -z "$TORCHRUN" ]]; then
+  echo "torchrun not found. Activate the project environment or set TORCHRUN=/path/to/torchrun." >&2
+  exit 127
+fi
 
 CKPT=${CKPT:?set CKPT=<path to a checkpoint-*.pth>}
 OUT=${OUT:?set OUT=<output dir; interpolation/ is written under it>}

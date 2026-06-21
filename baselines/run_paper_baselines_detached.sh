@@ -6,7 +6,8 @@ set -euo pipefail
 # resumes missing outputs instead of launching competing GPU jobs.
 
 PROJECT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-CONDA_BIN="${CONDA_BIN:-/home/ubuntu/miniconda3/bin/conda}"
+CONDA_BIN="${CONDA_BIN:-conda}"
+CONDA_ENV="${CONDA_ENV:-morpho-cellflux}"
 LOG_DIR="$PROJECT/outputs/baselines/logs"
 LOG="$LOG_DIR/paper_baselines_$(date -u +%Y%m%dT%H%M%SZ).log"
 PID_FILE="$LOG_DIR/paper_baselines.pid"
@@ -38,9 +39,10 @@ set -eo pipefail
 PROJECT="$1"
 LOG="$2"
 WAIT_FOR_PID="$3"
-CONDA_BIN="$4"
-cd "$PROJECT"
-{
+	CONDA_BIN="$4"
+	CONDA_ENV="$5"
+	cd "$PROJECT"
+	{
   echo "[$(date -Is)] START detached paper baseline queue"
   echo "project=$PROJECT"
   echo "wait_for_pid=${WAIT_FOR_PID:-none}"
@@ -50,15 +52,15 @@ cd "$PROJECT"
       sleep 60
     done
   fi
-  echo "[$(date -Is)] running in conda env pmf"
-  set +e
-  "$CONDA_BIN" run --no-capture-output -n pmf bash baselines/run_paper_baselines.sh
+	  echo "[$(date -Is)] running in conda env $CONDA_ENV"
+	  set +e
+	  "$CONDA_BIN" run --no-capture-output -n "$CONDA_ENV" bash baselines/run_paper_baselines.sh
   code=$?
   set -e
   echo "[$(date -Is)] DONE detached paper baseline queue exit=$code"
   exit "$code"
 } >> "$LOG" 2>&1
-' _ "$PROJECT" "$LOG" "${WAIT_FOR_PID:-}" "$CONDA_BIN" >/dev/null 2>&1 &
+	' _ "$PROJECT" "$LOG" "${WAIT_FOR_PID:-}" "$CONDA_BIN" "$CONDA_ENV" >/dev/null 2>&1 &
 
 pid=$!
 echo "$pid" > "$PID_FILE"

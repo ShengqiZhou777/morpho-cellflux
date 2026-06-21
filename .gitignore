@@ -14,6 +14,10 @@ uv.lock
 build/
 dist/
 *.egg-info/
+*.ckpt
+*.pth
+*.pt
+*.safetensors
 
 logs/
 outputs/
@@ -29,6 +33,7 @@ outputs/metrics/
 
 data/raw/*
 data/processed/*
+data/source/
 data/reports/*.json
 
 baselines/external/

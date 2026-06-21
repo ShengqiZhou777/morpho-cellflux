@@ -8,6 +8,7 @@ code treats adlib as a control distribution.
 """
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import anndata as ad
@@ -15,9 +16,14 @@ import numpy as np
 import pandas as pd
 import scipy.sparse as sp
 
-DIET_ROOT = Path(
-    "/home/ubuntu/data/sqzhou/projects/morpho-phenotyping/assets/paired_filtered/diet"
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+SOURCE_ROOT = Path(
+    os.environ.get(
+        "MORPHO_PHENOTYPING_ROOT",
+        PROJECT_ROOT / "data/source/morpho-phenotyping",
+    )
 )
+DIET_ROOT = SOURCE_ROOT / "assets/paired_filtered/diet"
 MANIFEST = DIET_ROOT / "manifests/manifest_diet_hep_paired.parquet"
 PROTEIN_H5AD = DIET_ROOT / "protein/protein_diet_hep_paired.h5ad"
 PANEL = ["Perilipin", "Calreticulin", "pS6RP"]

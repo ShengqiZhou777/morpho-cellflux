@@ -1,0 +1,26 @@
+name: morpho-cellflux
+channels:
+  - pytorch
+  - nvidia
+  - conda-forge
+dependencies:
+  - python=3.10
+  - pip
+  - pytorch
+  - torchvision
+  - pytorch-cuda=12.1
+  - numpy
+  - pandas
+  - pyarrow
+  - pyyaml
+  - scipy
+  - scikit-learn
+  - matplotlib
+  - pillow
+  - tqdm
+  - pip:
+      - anndata
+      - flow-matching
+      - torchdiffeq
+      - torchmetrics
+      - pytorch-lightning

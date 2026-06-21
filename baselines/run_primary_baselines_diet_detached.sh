@@ -11,7 +11,14 @@ set -euo pipefail
 #   PHENDIFF_EPOCHS=2 IMPA_EPOCHS=2 bash baselines/run_primary_baselines_diet_detached.sh
 
 PROJECT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-CONDA_SH="${CONDA_SH:-/home/ubuntu/miniconda3/etc/profile.d/conda.sh}"
+CONDA_ENV="${CONDA_ENV:-morpho-cellflux}"
+if [[ -z "${CONDA_SH:-}" ]]; then
+  if ! command -v conda >/dev/null 2>&1; then
+    echo "conda not found. Set CONDA_SH=/path/to/conda.sh or activate the environment manually." >&2
+    exit 127
+  fi
+  CONDA_SH="$(conda info --base)/etc/profile.d/conda.sh"
+fi
 LOG_DIR="$PROJECT/outputs/baselines/logs"
 LOG="$LOG_DIR/primary_diet_$(date -u +%Y%m%dT%H%M%SZ).log"
 PID_FILE="$LOG_DIR/primary_diet.pid"
@@ -36,7 +43,7 @@ ln -sfn "$(basename "$LOG")" "$LOG_DIR/primary_diet.latest.log"
     echo "project=$PROJECT"
     echo "phendiff_epochs=${PHENDIFF_EPOCHS:-8} impa_epochs=${IMPA_EPOCHS:-8}"
     source "$CONDA_SH"
-    conda activate pmf
+    conda activate "$CONDA_ENV"
     bash baselines/run_primary_baselines_diet.sh
     code=$?
     echo "[$(date -Is)] DONE primary diet baselines exit=$code"

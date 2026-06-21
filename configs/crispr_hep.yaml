@@ -3,7 +3,10 @@ project:
   description: Data factory for Perturb-Multi CRISPR hepatocytes.
 
 paths:
-  source_root: /home/ubuntu/data/sqzhou/projects/morpho-phenotyping
+  # Directory containing the Perturb-Multi assets listed below.
+  # Example:
+  #   export MORPHO_PHENOTYPING_ROOT=/path/to/morpho-phenotyping
+  source_root: ${MORPHO_PHENOTYPING_ROOT}
   raw_dir: data/raw
   processed_dir: data/processed
   reports_dir: data/reports
@@ -36,4 +39,3 @@ outputs:
   pairs_dir: data/processed/pairs
   condition_vocab: data/processed/condition_vocab.json
   audit_report: data/reports/data_audit.json
-
