@@ -617,10 +617,12 @@ class UNetModel(nn.Module):
         # --- Marker-aware cross-attention ---
         self.marker_encoder = None
         self.cross_attn_blocks = nn.ModuleList([])
+        self.ccm = None
         if self.use_marker_cross_attn:
-            from morphoflux.engine.models.cross_attention import (
+            from morphoflux.engine.models.mac import (
                 MarkerProfileEncoder,
                 CrossAttentionBlock,
+                ChannelConditionModulation,
             )
             self.marker_encoder = MarkerProfileEncoder(
                 in_channels=self.marker_profile_dim,
@@ -637,6 +639,11 @@ class UNetModel(nn.Module):
                         use_checkpoint=self.use_checkpoint,
                     )
                 )
+            # CCM: per-channel FiLM modulation before final output
+            self.ccm = ChannelConditionModulation(
+                token_dim=self.time_embed_dim // 2,
+                num_channels=self.out_channels,
+            )
 
         self.output_blocks = nn.ModuleList([])
         for level, mult in list(enumerate(self.channel_mult))[::-1]:
@@ -747,8 +754,14 @@ class UNetModel(nn.Module):
         for module in self.output_blocks:
             h = torch.cat([h, hs.pop()], dim=1)
             h = module(h, emb)
+
         h = h.type(x.dtype)
         result = self.out(h)
+
+        # --- Apply CCM: per-channel modulation on the output ---
+        if self.ccm is not None and "marker_profile" in extra:
+            result = self.ccm(marker_tokens, result)
+
         return result
 
 

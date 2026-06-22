@@ -1,13 +1,13 @@
 """
-PhenoFlux Marker-Aware Conditioning (MAC) module.
+PhenoFlux: two complementary conditioning modules for molecular phenotype transport.
 
-MarkerProfileEncoder: compresses the full 18-channel MERFISH marker profile into
-spatially-structured tokens that encode per-channel molecular state at each
-spatial location.
+MAC (Marker-Aware Conditioning): compresses full 18-channel MERFISH profiles into
+spatially-structured tokens, then lets UNet bottleneck features query them via
+cross-attention — solving WHERE the molecular state is distributed.
 
-CrossAttentionBlock: lets UNet bottleneck features query these molecular state
-tokens via multi-head cross-attention, enabling the model to condition generation
-on spatially-resolved marker-specific perturbation responses.
+CCM (Channel-wise Condition Modulation): derives per-channel FiLM parameters from
+the same marker tokens, modulating decoder output channels independently —
+solving HOW different markers respond differently to the same perturbation.
 
 Reference:
   PhenoFlux: Marker-Aware Flow Matching for Molecular Phenotype Transport
@@ -161,3 +161,62 @@ class CrossAttentionBlock(nn.Module):
         out = out.transpose(1, 2).reshape(B, C, H, W)
 
         return x + out
+
+
+# ---------------------------------------------------------------------------
+# CCM — Channel-wise Condition Modulation
+# ---------------------------------------------------------------------------
+
+class ChannelConditionModulation(nn.Module):
+    """Per-channel FiLM modulation from pooled marker profile tokens.
+
+    Different marker channels respond to the same perturbation through different
+    biological mechanisms (e.g. HFD: Calreticulin via ER stress, Perilipin via
+    lipid accumulation, TOMM20 via mitochondrial adaptation).  CCM enables the
+    decoder to apply channel-specific modulation, so each output channel can
+    respond with the correct magnitude and direction.
+
+    Design:
+      - Pool marker tokens spatially (mean over N_tokens)
+      - Learn per-channel scale and shift from the pooled representation
+      - Apply as residual FiLM: out = x * (1 + scale) + shift
+    """
+
+    def __init__(
+        self,
+        token_dim: int = 256,
+        num_channels: int = 3,
+        hidden_dim: int = 128,
+    ):
+        super().__init__()
+        self.token_dim = token_dim
+        self.num_channels = num_channels
+
+        self.pool_proj = nn.Sequential(
+            nn.Linear(token_dim, hidden_dim),
+            nn.SiLU(),
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.SiLU(),
+        )
+
+        # Per-channel scale initialized near zero (identity at start)
+        self.scale_proj = zero_module(nn.Linear(hidden_dim, num_channels))
+        # Per-channel shift initialized near zero
+        self.shift_proj = zero_module(nn.Linear(hidden_dim, num_channels))
+
+    def forward(self, tokens: torch.Tensor, x: torch.Tensor) -> torch.Tensor:
+        """Apply per-channel FiLM modulation.
+
+        Args:
+            tokens: (B, N_tokens, token_dim) from MarkerProfileEncoder
+            x:      (B, num_channels, H, W) decoder features
+
+        Returns:
+            (B, num_channels, H, W) modulated features
+        """
+        # Pool spatially: (B, N_tokens, token_dim) -> (B, token_dim)
+        pooled = tokens.mean(dim=1)
+        h = self.pool_proj(pooled)                              # (B, hidden_dim)
+        scale = self.scale_proj(h).unsqueeze(-1).unsqueeze(-1)  # (B, C, 1, 1)
+        shift = self.shift_proj(h).unsqueeze(-1).unsqueeze(-1)  # (B, C, 1, 1)
+        return x * (1.0 + scale) + shift
