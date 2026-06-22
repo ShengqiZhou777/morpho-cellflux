@@ -1,0 +1,41 @@
+# PhenoFlux — Marker-Aware Flow Matching for Diet Hepatocytes.
+#
+# PhenoFlux extends standard flow matching by conditioning on the full 18-channel
+# MERFISH molecular profile through a Marker-Aware Conditioning (MAC) module:
+#   MarkerProfileEncoder:  18 channels → spatially-structured feature tokens
+#   Cross-Attention Bottleneck: UNet features query molecular state tokens
+#
+# This enables the model to learn per-channel, spatially-resolved perturbation
+# responses — for example, distinguishing ER-stress-driven Calreticulin
+# upregulation from lipid-accumulation-driven Perilipin changes under HFD.
+#
+# Usage:
+#   CONFIG=phenoflux_diet DATASET=phenoflux_diet bash scripts/train.sh
+
+task_name: diet_id
+
+ood_set: Null
+mol_list: Null
+trainable_emb: False
+dataset_name: 'perturbmulti'
+dataset: phenoflux_diet        # PhenoFlux architecture (UNet + MAC module)
+n_channels: 3
+channels: [9, 5, 8]            # 3-channel RGB panel: Calreticulin / Perilipin / TOMM20
+multimodal: False
+batch_correction: False
+batch_key: Null
+use_condition_embeddings: False
+add_controls: False
+condition_embedding_dimension: null
+modality_list:
+  - Gene
+
+image_path: data/raw/diet/images
+data_index_path: data/processed/diet/index_diet.csv
+embedding_path: data/processed/diet/embedding_diet.csv
+
+# Load full 18-channel MERFISH profile for PhenoFlux MAC module
+use_marker_profile: true
+
+augment_train: True
+normalize: False

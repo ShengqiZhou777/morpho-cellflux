@@ -62,6 +62,15 @@ def _gather_trt2ctrl_idx(local_mapping: dict) -> dict:
     return merged
 
 
+def _gather_int_sum(value: int, device: torch.device) -> int:
+    """Sum an integer across distributed ranks."""
+    if not distributed_mode.is_dist_avail_and_initialized():
+        return int(value)
+    tensor = torch.tensor([int(value)], device=device, dtype=torch.long)
+    torch.distributed.all_reduce(tensor, op=torch.distributed.ReduceOp.SUM)
+    return int(tensor.item())
+
+
 class CFGScaledModel(ModelWrapper):
     def __init__(self, model: Module):
         super().__init__(model)
@@ -158,6 +167,10 @@ def eval_model(
         samples = None
         labels = None
 
+        # Build extra conditioning dict (may include marker profile)
+        eval_extra = {"concat_conditioning": z_emb_trg}
+        if "marker_profile" in batch:
+            eval_extra["marker_profile"] = batch["marker_profile"].to(device)
 
         if num_synthetic < fid_samples:
             cfg_scaled_model.reset_nfe_counter()
@@ -211,7 +224,7 @@ def eval_model(
                     if "step_size" in ode_opts
                     else None,
                     cfg_scale=args.cfg_scale,
-                    extra={"concat_conditioning": z_emb_trg},
+                    extra=eval_extra,
                 )
                 if interpolate:
                     # Save the intermediate images
@@ -241,15 +254,16 @@ def eval_model(
 
 
             synthetic_samples = synthetic_samples.to(torch.float32) / 255.0
-            logger.info(
-                f"{x_real_ctrl.shape[0]} samples generated in {cfg_scaled_model.get_nfe()} evaluations."
-            )
             if num_synthetic + synthetic_samples.shape[0] > fid_samples:
                 synthetic_samples = synthetic_samples[: fid_samples - num_synthetic]
+            logger.info(
+                f"{synthetic_samples.shape[0]} samples generated in {cfg_scaled_model.get_nfe()} evaluations."
+            )
 
             real_samples = torch.clamp(x_real_trt * 0.5 + 0.5, min=0.0, max=1.0)
             real_samples = torch.floor(real_samples * 255)
             real_samples = real_samples.to(torch.float32) / 255.0
+            real_samples = real_samples[: synthetic_samples.shape[0]]
 
 
             fid_metric.update(real_samples, real=True)
@@ -289,6 +303,9 @@ def eval_model(
         if not args.compute_fid:
             return {}
 
+        if num_synthetic >= fid_samples:
+            break
+
         if args.test_run:
             break
     image_dir = Path(args.output_dir) / "fid_samples"
@@ -299,8 +316,15 @@ def eval_model(
     # global-only file makes old epochs' images get re-paired against the newest controls,
     # adding spurious noise to per-epoch Delta-direction. Aggregate eval prefers the
     # per-epoch file (epoch-<e>/trt2ctrl_idx.json) when present.
+    global_num_synthetic = _gather_int_sum(num_synthetic, device)
     merged_trt2ctrl_idx = _gather_trt2ctrl_idx(trt2ctrl_idx)
     if distributed_mode.is_main_process():
+        if global_num_synthetic < args.fid_samples:
+            logger.warning(
+                "Requested %d FID samples, but generated %d. Eval target split is smaller than the requested budget.",
+                args.fid_samples,
+                global_num_synthetic,
+            )
         for jpath in (f'{image_dir}/trt2ctrl_idx.json',
                       f'{image_dir}/epoch-{epoch}/trt2ctrl_idx.json'):
             os.makedirs(os.path.dirname(jpath), exist_ok=True)
@@ -310,7 +334,12 @@ def eval_model(
         logger.info("Saved %d treated->control mappings", len(merged_trt2ctrl_idx))
     if distributed_mode.is_dist_avail_and_initialized():
         torch.distributed.barrier()
-    return {"fid": float(fid_metric.compute().detach().cpu())}
+    return {
+        "fid": float(fid_metric.compute().detach().cpu()),
+        "fid_samples_requested": int(args.fid_samples),
+        "fid_samples_generated": int(global_num_synthetic),
+        "saved_mappings": int(len(merged_trt2ctrl_idx)),
+    }
 
 
 def save_interpolation_grid(
@@ -378,7 +407,7 @@ def save_interpolation_grid(
         plt.savefig(sample_save_path, dpi=300)
         plt.close()
         # Also dump raw per-cell trajectory arrays (in [-1,1]) for the polished figure
-        # renderer (scripts/plot_trajectory_figure.py). Only runs in --interpolate mode.
+        # renderer (scripts/plot_flow_figure.py). Only runs in --interpolate mode.
         np.savez(
             save_dir / f"sample_{b}_traj.npz",
             control=real_ctrl[b].cpu().numpy(),

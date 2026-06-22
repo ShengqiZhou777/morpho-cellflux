@@ -11,14 +11,23 @@ from pathlib import Path
 PERTURBMULTI_CHANNELS = [5, 9, 10]
 
 
-def _load_perturbmulti(image_path, sample_key, channels=None):
+def _load_perturbmulti(image_path, sample_key, channels=None, return_full_profile=False):
     """Load a Perturb-Multi cell crop: npz['x'] (18,H,W) float[0,1] -> selected
     channels in [-1, 1], already channel-first so no permute/255 transform.
-    `channels` (npz indices) is per-config; falls back to PERTURBMULTI_CHANNELS."""
+    `channels` (npz indices) is per-config; falls back to PERTURBMULTI_CHANNELS.
+
+    When `return_full_profile` is True, also returns the full (18, H, W) array
+    in [0, 1] for use as marker-aware conditioning (Direction A)."""
     channels = channels if channels is not None else PERTURBMULTI_CHANNELS
-    arr = np.load(Path(image_path) / f"{sample_key}.npz")["x"][channels]
+    full = np.load(Path(image_path) / f"{sample_key}.npz")["x"]
+    arr = full[channels]
     img = torch.from_numpy(np.ascontiguousarray(arr)).float()
-    return img * 2.0 - 1.0  # [0,1] -> [-1,1]
+    result = img * 2.0 - 1.0  # [0,1] -> [-1,1]
+
+    if return_full_profile:
+        full_tensor = torch.from_numpy(np.ascontiguousarray(full)).float()
+        return result, full_tensor
+    return result
 
 
 class CustomTransform:
@@ -67,7 +76,7 @@ class CustomTransform:
         trans = T.Compose(t)
         return trans(X)
 
-def read_files_pert(file_names, mols, mol2id, y2id, dose, y, transform, image_path, dataset_name, idx, multimodal, batch, iter_ctrl, channels=None):
+def read_files_pert(file_names, mols, mol2id, y2id, dose, y, transform, image_path, dataset_name, idx, multimodal, batch, iter_ctrl, channels=None, return_full_profile=False):
     """
     Read and process control and treated batch images.
 
@@ -109,8 +118,12 @@ def read_files_pert(file_names, mols, mol2id, y2id, dose, y, transform, image_pa
 
     if dataset_name == "perturbmulti":
         # Direct npz load by cell_id; same-batch ctrl pairing already done above.
-        img_ctrl = _load_perturbmulti(image_path, img_file_ctrl, channels)
-        img_trt = _load_perturbmulti(image_path, img_file_trt, channels)
+        if return_full_profile:
+            img_ctrl, full_ctrl = _load_perturbmulti(image_path, img_file_ctrl, channels, return_full_profile=True)
+            img_trt, full_trt = _load_perturbmulti(image_path, img_file_trt, channels, return_full_profile=True)
+        else:
+            img_ctrl = _load_perturbmulti(image_path, img_file_ctrl, channels)
+            img_trt = _load_perturbmulti(image_path, img_file_trt, channels)
         # Range-safe flip augmentation. CustomTransform's noise/normalize path assumes
         # [0,255] inputs and is bypassed for perturbmulti, so apply flips directly to the
         # [-1,1] tensors when augmentation is on (train fold + augment_train). Flips do not
@@ -118,9 +131,13 @@ def read_files_pert(file_names, mols, mol2id, y2id, dose, y, transform, image_pa
         if getattr(transform, "augment", False):
             if torch.rand(1).item() < 0.3:
                 img_ctrl, img_trt = torch.flip(img_ctrl, [-1]), torch.flip(img_trt, [-1])
+                if return_full_profile:
+                    full_ctrl, full_trt = torch.flip(full_ctrl, [-1]), torch.flip(full_trt, [-1])
             if torch.rand(1).item() < 0.3:
                 img_ctrl, img_trt = torch.flip(img_ctrl, [-2]), torch.flip(img_trt, [-2])
-        return {
+                if return_full_profile:
+                    full_ctrl, full_trt = torch.flip(full_ctrl, [-2]), torch.flip(full_trt, [-2])
+        result = {
             'X': (img_ctrl, img_trt),
             'mols': mol2id[mols["trt"][idx_trt]],
             'y_id': y2id[y["trt"][idx_trt]],
@@ -129,6 +146,9 @@ def read_files_pert(file_names, mols, mol2id, y2id, dose, y, transform, image_pa
             'idx_ctrl': idx_ctrl,
             'batch': batch_trt,
         }
+        if return_full_profile:
+            result['marker_profile'] = full_trt  # full 18-channel profile of the treated cell
+        return result
 
     # Split files
     file_split_ctrl = img_file_ctrl.split('-')

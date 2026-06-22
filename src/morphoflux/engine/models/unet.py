@@ -479,6 +479,11 @@ class UNetModel(nn.Module):
     input_projection: bool = True
     condition_dim: int = 1224 # 1225 for cpg000, 1024 for bbbc021, 200 for rxrx1
 
+    # --- Marker-aware cross-attention (Direction A) ---
+    use_marker_cross_attn: bool = False
+    marker_profile_dim: int = 18       # number of marker channels in the full profile
+    marker_cross_attn_resolutions: Tuple[int] = (8,)  # ds factors where cross-attn is applied
+
     image_size: int = -1  # not used...
     _target_: str = "lib.models.gd_unet.UNetModel"
 
@@ -609,6 +614,30 @@ class UNetModel(nn.Module):
         )
         self._feature_size += ch
 
+        # --- Marker-aware cross-attention ---
+        self.marker_encoder = None
+        self.cross_attn_blocks = nn.ModuleList([])
+        if self.use_marker_cross_attn:
+            from morphoflux.engine.models.cross_attention import (
+                MarkerProfileEncoder,
+                CrossAttentionBlock,
+            )
+            self.marker_encoder = MarkerProfileEncoder(
+                in_channels=self.marker_profile_dim,
+                hidden_dim=self.time_embed_dim // 2,  # 256 for default model_channels=128
+            )
+            # One cross-attention block per resolution in marker_cross_attn_resolutions
+            # (typically just the bottleneck at ds=8)
+            for _ in self.marker_cross_attn_resolutions:
+                self.cross_attn_blocks.append(
+                    CrossAttentionBlock(
+                        channels=ch,  # channels at the bottleneck
+                        context_dim=self.time_embed_dim // 2,
+                        num_heads=max(1, ch // 64),  # 4 heads for ch=256
+                        use_checkpoint=self.use_checkpoint,
+                    )
+                )
+
         self.output_blocks = nn.ModuleList([])
         for level, mult in list(enumerate(self.channel_mult))[::-1]:
             for i in range(self.num_res_blocks + 1):
@@ -708,6 +737,13 @@ class UNetModel(nn.Module):
             h = module(h, emb)
             hs.append(h)
         h = self.middle_block(h, emb)
+
+        # --- Apply marker-aware cross-attention at the bottleneck ---
+        if self.use_marker_cross_attn and "marker_profile" in extra:
+            marker_tokens = self.marker_encoder(extra["marker_profile"])
+            for ca_block in self.cross_attn_blocks:
+                h = ca_block(h, marker_tokens)
+
         for module in self.output_blocks:
             h = torch.cat([h, hs.pop()], dim=1)
             h = module(h, emb)

@@ -35,6 +35,34 @@ def skewed_timestep_sample(num_samples: int, device: torch.device) -> torch.Tens
     return time
 
 
+def foreground_weighted_mse(
+    pred: torch.Tensor,
+    target: torch.Tensor,
+    x_0: torch.Tensor,
+    x_1: torch.Tensor,
+    threshold: float,
+    foreground_weight: float,
+    background_weight: float,
+) -> torch.Tensor:
+    """MSE weighted toward marker-positive cell foreground.
+
+    Perturb-Multi crops are sparse false-color marker readouts. The tensors are
+    in [-1,1], so the dynamic mask is computed after mapping back to [0,1].
+    """
+    err = torch.pow(pred - target, 2)
+    x0_raw = (x_0.detach() + 1.0) * 0.5
+    x1_raw = (x_1.detach() + 1.0) * 0.5
+    mask = ((x0_raw.amax(dim=1, keepdim=True) > threshold) |
+            (x1_raw.amax(dim=1, keepdim=True) > threshold))
+    weights = torch.where(
+        mask,
+        torch.as_tensor(foreground_weight, device=err.device, dtype=err.dtype),
+        torch.as_tensor(background_weight, device=err.device, dtype=err.dtype),
+    )
+    weights = weights.expand_as(err)
+    return (err * weights).sum() / weights.sum().clamp_min(1.0)
+
+
 def my_train_one_epoch(
     model: torch.nn.Module,
     data_loader: Iterable,
@@ -78,6 +106,10 @@ def my_train_one_epoch(
             conditioning = {}
         else:
             conditioning = {"concat_conditioning": z_emb_trg}
+
+        # Marker-aware cross-attention: pass full 18-channel profile to model
+        if "marker_profile" in batch:
+            conditioning["marker_profile"] = batch["marker_profile"].to(device)
         
         if args.discrete_flow_matching:
             samples = (samples * 255.0).to(torch.long)
@@ -112,7 +144,19 @@ def my_train_one_epoch(
             u_t = path_sample.dx_t
 
             with torch.cuda.amp.autocast():
-                loss = torch.pow(model(x_t, t, extra=conditioning) - u_t, 2).mean()
+                pred = model(x_t, t, extra=conditioning)
+                if getattr(args, "foreground_loss", False):
+                    loss = foreground_weighted_mse(
+                        pred,
+                        u_t,
+                        x_0,
+                        x_real_trt,
+                        threshold=args.foreground_threshold,
+                        foreground_weight=args.foreground_weight,
+                        background_weight=args.background_weight,
+                    )
+                else:
+                    loss = torch.pow(pred - u_t, 2).mean()
 
         loss_value = loss.item()
         batch_loss.update(loss)

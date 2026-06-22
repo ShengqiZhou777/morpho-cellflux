@@ -69,6 +69,8 @@ class CellDataset:
         # Initialize embeddings
         self.initialize_embeddings()
 
+        return_full_profile = getattr(args, "use_marker_profile", False)
+
         # Initialize the datasets
         self.fold_datasets = {
             'train': CellDatasetFold('train',
@@ -85,7 +87,8 @@ class CellDataset:
                                      multimodal=self.multimodal,
                                      cpd_name=self.cpd_name,
                                      iter_ctrl=self.iter_ctrl,
-                                     channels=self.channels),
+                                     channels=self.channels,
+                                     return_full_profile=return_full_profile),
 
             'test': CellDatasetFold('test',
                                     self.image_path,
@@ -101,7 +104,8 @@ class CellDataset:
                                     multimodal=self.multimodal,
                                     cpd_name=self.cpd_name,
                                     iter_ctrl=False,
-                                    channels=self.channels)}
+                                    channels=self.channels,
+                                    return_full_profile=return_full_profile)}
 
     def _read_folds(self):
         """
@@ -240,7 +244,8 @@ class CellDatasetFold(Dataset):
                  multimodal=False,
                  cpd_name="CPD_NAME",
                  iter_ctrl=False,
-                 channels=None):
+                 channels=None,
+                 return_full_profile=False):
         """
         Initialize the CellDatasetFold instance.
 
@@ -271,6 +276,7 @@ class CellDatasetFold(Dataset):
         self.cpd_name = cpd_name
         self.iter_ctrl = iter_ctrl
         self.channels = channels
+        self.return_full_profile = return_full_profile
         # Extract variables
         if self.batch_correction:
             self.file_names = data['SAMPLE_KEY']
@@ -365,7 +371,8 @@ class CellDatasetFold(Dataset):
                                    self.multimodal,
                                    self.batch,
                                    self.iter_ctrl,
-                                   self.channels,)
+                                   self.channels,
+                                   self.return_full_profile)
 
 class CellDataLoader(LightningDataModule):
     """

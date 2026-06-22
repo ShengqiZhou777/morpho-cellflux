@@ -196,6 +196,36 @@ MODEL_CONFIGS = {
         "with_fourier_features": False,
         "condition_dim": 3,
     },
+    "phenoflux_diet": {
+        # PhenoFlux: marker-aware flow matching variant of diet_id.
+        # Same UNet body, but adds a Marker-Aware Conditioning (MAC) module:
+        # MarkerProfileEncoder (18-ch → tokens) + CrossAttention at the bottleneck,
+        # enabling the model to condition on the full 18-channel MERFISH molecular
+        # profile rather than just a global one-hot condition vector.
+        "in_channels": 3,
+        "model_channels": 128,
+        "out_channels": 3,
+        "num_res_blocks": 4,
+        "attention_resolutions": [4],
+        "dropout": 0.3,
+        "channel_mult": [2, 2, 2],
+        "conv_resample": False,
+        "dims": 2,
+        "num_classes": None,
+        "use_checkpoint": False,
+        "num_heads": 1,
+        "num_head_channels": -1,
+        "num_heads_upsample": -1,
+        "use_scale_shift_norm": True,
+        "resblock_updown": False,
+        "use_new_attention_order": True,
+        "with_fourier_features": False,
+        "condition_dim": 3,
+        # --- PhenoFlux MAC module ---
+        "use_marker_cross_attn": True,
+        "marker_profile_dim": 18,
+        "marker_cross_attn_resolutions": [8],
+    },
     "cifar10_discrete": {
         "in_channels": 3,
         "model_channels": 96,
