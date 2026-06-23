@@ -77,6 +77,11 @@ def my_train_one_epoch(
 ):
     gc.collect()
     model.train(True)
+    _model = model.module if hasattr(model, 'module') else model
+    _model = getattr(_model, 'model', _model)  # unwrap EMA if present
+    _use_mac = getattr(_model, 'use_mac', False)
+    _use_ccm = getattr(_model, 'use_ccm', False)
+    _use_marker_module = _use_mac or _use_ccm
     batch_loss = MeanMetric().to(device, non_blocking=True)
     epoch_loss = MeanMetric().to(device, non_blocking=True)
 
@@ -107,9 +112,17 @@ def my_train_one_epoch(
         else:
             conditioning = {"concat_conditioning": z_emb_trg}
 
-        # Marker-aware cross-attention: pass full 18-channel profile to model
-        if "marker_profile" in batch:
-            conditioning["marker_profile"] = batch["marker_profile"].to(device)
+        # Marker profile: only add when conditioning is active (not dropped for CFG).
+        # Otherwise the unconditional path sees the molecular profile and can cheat,
+        # weakening classifier-free guidance.
+        if "marker_profile" in batch and "concat_conditioning" in conditioning:
+            mp = batch["marker_profile"].to(device)
+            if _use_marker_module:
+                conditioning["marker_profile"] = mp
+            else:
+                conditioning["concat_conditioning"] = torch.cat(
+                    [conditioning["concat_conditioning"], mp], dim=1
+                )
         
         if args.discrete_flow_matching:
             samples = (samples * 255.0).to(torch.long)
@@ -143,7 +156,7 @@ def my_train_one_epoch(
             x_t = path_sample.x_t
             u_t = path_sample.dx_t
 
-            with torch.cuda.amp.autocast():
+            with torch.amp.autocast("cuda"):
                 pred = model(x_t, t, extra=conditioning)
                 if getattr(args, "foreground_loss", False):
                     loss = foreground_weighted_mse(

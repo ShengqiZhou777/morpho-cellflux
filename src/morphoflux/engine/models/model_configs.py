@@ -196,10 +196,35 @@ MODEL_CONFIGS = {
         "with_fourier_features": False,
         "condition_dim": 3,
     },
+    "diet_id_18ch": {
+        # 18-channel naive baseline: same UNet as diet_id, but condition_dim = 3 (one-hot)
+        # + 18 (marker profile concat).  The extra 18 channels are concatenated to the
+        # condition vector in the train/eval loop — no MAC, no cross-attention, no CCM.
+        # This proves that MAC's structural inductive bias matters, not just the extra data.
+        "in_channels": 3,
+        "model_channels": 128,
+        "out_channels": 3,
+        "num_res_blocks": 4,
+        "attention_resolutions": [4],
+        "dropout": 0.3,
+        "channel_mult": [2, 2, 2],
+        "conv_resample": False,
+        "dims": 2,
+        "num_classes": None,
+        "use_checkpoint": False,
+        "num_heads": 1,
+        "num_head_channels": -1,
+        "num_heads_upsample": -1,
+        "use_scale_shift_norm": True,
+        "resblock_updown": False,
+        "use_new_attention_order": True,
+        "with_fourier_features": False,
+        "condition_dim": 21,   # 3 (diet one-hot) + 18 (marker profile concat)
+    },
     "phenoflux_diet": {
         # PhenoFlux: marker-aware flow matching variant of diet_id.
-        # Same UNet body, but adds a Marker-Aware Conditioning (MAC) module:
-        # MarkerProfileEncoder (18-ch → tokens) + CrossAttention at the bottleneck,
+        # Same UNet body, but adds a MAC (Marker-Aware Conditioning) module:
+        # MarkerProfileEncoder (18-ch → tokens) + MACAttention at the bottleneck,
         # enabling the model to condition on the full 18-channel MERFISH molecular
         # profile rather than just a global one-hot condition vector.
         "in_channels": 3,
@@ -221,10 +246,63 @@ MODEL_CONFIGS = {
         "use_new_attention_order": True,
         "with_fourier_features": False,
         "condition_dim": 3,
-        # --- PhenoFlux MAC module ---
-        "use_marker_cross_attn": True,
+        # --- PhenoFlux modules ---
+        "use_mac": True,
+        "use_ccm": True,
         "marker_profile_dim": 18,
-        "marker_cross_attn_resolutions": [8],
+        "mac_resolutions": [8],
+    },
+    "phenoflux_diet_no_ccm": {
+        # Ablation: MAC cross-attention only, no CCM per-channel FiLM.
+        "in_channels": 3,
+        "model_channels": 128,
+        "out_channels": 3,
+        "num_res_blocks": 4,
+        "attention_resolutions": [4],
+        "dropout": 0.3,
+        "channel_mult": [2, 2, 2],
+        "conv_resample": False,
+        "dims": 2,
+        "num_classes": None,
+        "use_checkpoint": False,
+        "num_heads": 1,
+        "num_head_channels": -1,
+        "num_heads_upsample": -1,
+        "use_scale_shift_norm": True,
+        "resblock_updown": False,
+        "use_new_attention_order": True,
+        "with_fourier_features": False,
+        "condition_dim": 3,
+        "use_mac": True,
+        "use_ccm": False,
+        "marker_profile_dim": 18,
+        "mac_resolutions": [8],
+    },
+    "phenoflux_diet_no_mac": {
+        # Ablation: CCM per-channel FiLM only, no MAC cross-attention.
+        "in_channels": 3,
+        "model_channels": 128,
+        "out_channels": 3,
+        "num_res_blocks": 4,
+        "attention_resolutions": [4],
+        "dropout": 0.3,
+        "channel_mult": [2, 2, 2],
+        "conv_resample": False,
+        "dims": 2,
+        "num_classes": None,
+        "use_checkpoint": False,
+        "num_heads": 1,
+        "num_head_channels": -1,
+        "num_heads_upsample": -1,
+        "use_scale_shift_norm": True,
+        "resblock_updown": False,
+        "use_new_attention_order": True,
+        "with_fourier_features": False,
+        "condition_dim": 3,
+        "use_mac": False,
+        "use_ccm": True,
+        "marker_profile_dim": 18,
+        "mac_resolutions": [8],
     },
     "cifar10_discrete": {
         "in_channels": 3,

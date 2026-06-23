@@ -17,14 +17,14 @@ set -uo pipefail   # deliberately no -e: one lane must not silently kill the oth
 PROJECT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$PROJECT"
 
-INCLUDE_STARGAN="${INCLUDE_STARGAN:-0}"   # StarGAN stays a separate supplement
+INCLUDE_STARGAN="${INCLUDE_STARGAN:-1}"
 PHENDIFF_EPOCHS="${PHENDIFF_EPOCHS:-8}"
 IMPA_EPOCHS="${IMPA_EPOCHS:-8}"
 PHENDIFF_BATCH="${PHENDIFF_BATCH:-32}"    # single-GPU == 2-GPU(batch16) global batch
 IMPA_BATCH="${IMPA_BATCH:-16}"
 # Lane assignment: "<gpu>:<benchmark>" pairs.
 LANE0="${LANE0:-0:diet}"
-LANE1="${LANE1:-1:crispr}"
+LANE1="${LANE1:-1:crispr_paper}"
 RUN_ID="${BASELINE_RUN_ID:-$(date -u +%Y%m%dT%H%M%SZ)-$$}"
 STATUS_ROOT="$PROJECT/outputs/baselines/logs/status"
 STATUS_DIR="$STATUS_ROOT/$RUN_ID"
@@ -103,7 +103,7 @@ PY
 benchmark_config() {
   case "$1" in
     diet) echo "configs/diet_id.yaml" ;;
-    crispr) echo "configs/perturbmulti_train_id.yaml" ;;
+    crispr_paper) echo "configs/crispr_paper_core.yaml" ;;
     *) echo "Unknown benchmark: $1" >&2; return 2 ;;
   esac
 }
@@ -123,20 +123,6 @@ ensure_export() {
   echo "[$(date -Is)] DONE export $benchmark"
 }
 
-run_copy_control_for() {
-  local benchmark="$1" config out
-  config="$(benchmark_config "$benchmark")"
-  out="outputs/baselines/copy_control/$benchmark"
-  if summary_exists "$out"; then
-    echo "[$(date -Is)] SKIP copy_control $benchmark: summary exists"
-    return 0
-  fi
-  echo "[$(date -Is)] START copy_control $benchmark"
-  python baselines/copy_control.py --config "$config" --output "$out" --split test \
-    && python scripts/aggregate_eval.py "$out" 5 0
-  echo "[$(date -Is)] DONE copy_control $benchmark"
-}
-
 # A lane owns one GPU and runs the full per-benchmark chain on it, sequentially.
 lane() {
   local spec="$1" gpu benchmark
@@ -147,18 +133,6 @@ lane() {
   export MAIN_PROCESS_PORT=$((29500 + gpu))   # distinct accelerate rendezvous per lane
 
   echo "[$(date -Is)] [gpu=$gpu] LANE START $benchmark"
-
-  if summary_exists "outputs/baselines/copy_control/$benchmark"; then
-    echo "[$(date -Is)] [gpu=$gpu] SKIP copy_control $benchmark: summary exists"
-    record_status "$benchmark" copy_control skipped "summary exists" 0 "$gpu"
-  elif run_copy_control_for "$benchmark"; then
-    record_status "$benchmark" copy_control complete "completed" 0 "$gpu"
-  else
-    code=$?
-    echo "[$(date -Is)] [gpu=$gpu] FAIL copy_control $benchmark exit=$code"
-    record_status "$benchmark" copy_control failed "copy-control or aggregate_eval failed" "$code" "$gpu"
-    lane_rc=1
-  fi
 
   if summary_exists "outputs/baselines/phendiff/$benchmark"; then
     echo "[$(date -Is)] [gpu=$gpu] SKIP PhenDiff $benchmark: summary exists"
@@ -188,6 +162,25 @@ lane() {
       code=$?
       echo "[$(date -Is)] [gpu=$gpu] FAIL IMPA $benchmark exit=$code"
       record_status "$benchmark" impa failed "run_impa.sh failed" "$code" "$gpu"
+      lane_rc=1
+    fi
+  fi
+
+  if [[ "$INCLUDE_STARGAN" != "1" ]]; then
+    echo "[$(date -Is)] [gpu=$gpu] SKIP StarGAN $benchmark: INCLUDE_STARGAN=$INCLUDE_STARGAN"
+    record_status "$benchmark" stargan skipped "INCLUDE_STARGAN=$INCLUDE_STARGAN" 0 "$gpu"
+  elif summary_exists "outputs/baselines/stargan/$benchmark"; then
+    echo "[$(date -Is)] [gpu=$gpu] SKIP StarGAN $benchmark: summary exists"
+    record_status "$benchmark" stargan skipped "summary exists" 0 "$gpu"
+  else
+    echo "[$(date -Is)] [gpu=$gpu] START StarGAN $benchmark"
+    if BENCHMARK="$benchmark" BATCH="${STARGAN_BATCH:-16}" NUM_ITERS="${STARGAN_NUM_ITERS:-50000}" \
+      bash baselines/run_stargan.sh; then
+      record_status "$benchmark" stargan complete "completed" 0 "$gpu"
+    else
+      code=$?
+      echo "[$(date -Is)] [gpu=$gpu] FAIL StarGAN $benchmark exit=$code"
+      record_status "$benchmark" stargan failed "run_stargan.sh failed" "$code" "$gpu"
       lane_rc=1
     fi
   fi

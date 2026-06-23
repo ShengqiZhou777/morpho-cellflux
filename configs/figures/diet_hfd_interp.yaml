@@ -19,7 +19,7 @@ condition_embedding_dimension: null
 modality_list:
   - Gene
 
-image_path: data/raw/diet_extracted_images
+image_path: data/raw/diet/images
 data_index_path: data/processed/diet/index_diet_hfd_interp.csv
 embedding_path: data/processed/diet/embedding_diet.csv
 

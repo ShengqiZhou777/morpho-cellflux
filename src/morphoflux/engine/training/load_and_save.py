@@ -52,7 +52,11 @@ def load_model(args, model_without_ddp, optimizer, loss_scaler, lr_schedule):
             )
         else:
             checkpoint = torch.load(args.resume, map_location="cpu", weights_only=False)
-        model_without_ddp.load_state_dict(checkpoint["model"])
+        state_dict = {
+            k.replace("cross_attn_blocks", "mac_blocks"): v
+            for k, v in checkpoint["model"].items()
+        }
+        model_without_ddp.load_state_dict(state_dict)
         print("Resume checkpoint %s" % args.resume)
         if (
             "optimizer" in checkpoint

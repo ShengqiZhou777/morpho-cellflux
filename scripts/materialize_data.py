@@ -21,9 +21,9 @@ def parse_args() -> argparse.Namespace:
         help="Path to the dataset factory YAML config.",
     )
     parser.add_argument(
-        "--no-symlinks",
+        "--no-verify",
         action="store_true",
-        help="Skip creating raw asset symlinks.",
+        help="Skip verifying that raw assets exist under data/raw.",
     )
     return parser.parse_args()
 
@@ -32,7 +32,7 @@ def main() -> None:
     args = parse_args()
     cfg = load_config(args.config)
     factory = DataFactory(cfg, project_root=ROOT)
-    audit = factory.materialize(make_links=not args.no_symlinks)
+    audit = factory.materialize(verify_assets=not args.no_verify)
 
     summary = {
         "manifest_rows": audit["manifest_rows"],

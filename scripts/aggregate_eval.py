@@ -12,19 +12,17 @@ foreground-mean intensity of generated / real-target / source(control) cells and
   - Pearson/Spearman( per-gene generated mean , per-gene real-target mean )
         -> cross-gene morphology ranking (meaningful only when many perturbations exist).
   - (control-init) dir-corr & sign-agreement of (gen-src) vs (tgt-src)   -> direction.
-  - DISTRIBUTION metrics vs a COPY-CONTROL baseline: 1D Wasserstein & energy distance
-    between the generated-cell and real-target-cell foreground-mean distributions, and the
-    same for the trivial source(control) predictor. The headline is
+  - DISTRIBUTION metrics vs the matched source-control reference: 1D Wasserstein
+    & energy distance between the generated-cell and real-target-cell foreground-mean
+    distributions, and the same for the trivial source(control) predictor. The headline is
         gap_closed = 1 - d(gen, tgt) / d(src, tgt)
     = fraction of the control->target population gap the model closes (1=perfect, 0=no
     better than copying the control, <0=worse). This is the honest metric for diet, where
     only 2 treated conditions exist and cross-gene Pearson is degenerate (==1.0).
-  - CRISPR only: headline metrics ALSO on the rna_snr>=THR subset -- a perturbation-VALIDITY
-    filter (did the sgRNA knock the transcript down), measured in RNA space, NOT the
-    morphology readout being scored -- plus the full set and a hit/non-hit split. Filtering
-    on rna_snr is legitimate preprocessing; filtering on morph_*/lipid_hit would be circular.
+  - CRISPR paper core: also aggregate genes by the original Perturb-Multi biological
+    programs from `program_labels_paper.csv`.
 
-Usage:  python scripts/aggregate_eval.py <eval_run_dir> [min_n] [epoch] [--snr THR]
+Usage:  python scripts/aggregate_eval.py <eval_run_dir> [min_n] [epoch]
 The run dir must contain fid_samples/<epoch>/<gene>/<target_id>.png and
 fid_samples/trt2ctrl_idx.json (produced by train.py --save_fid_samples).
 """
@@ -44,14 +42,13 @@ from scipy.stats import pearsonr, spearmanr, wasserstein_distance, energy_distan
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # Default image dir; overridden per-run from the run's args.json image_path in main()
 # so eval reads the SAME npz cells the run trained on (e.g. diet vs CRISPR).
-IMG = os.path.join(REPO_ROOT, "data/raw/extracted_images")
+IMG = os.path.join(REPO_ROOT, "data/raw/crispr/images")
 
 # Canonical 18-channel npz var order (index -> marker name).
 CH_NAMES = ["Alb", "polyT", "rRNA", "M6PR", "CathB", "Perilipin", "Sqstm1", "LC3b",
             "TOMM20", "Calreticulin", "pS6RP", "Na/K-ATPase", "SNAP23", "TOM70", "Rab7",
             "mtRNA", "Vimentin", "Gapdh"]
-DEFAULT_CHANNELS = [5, 9, 10]            # legacy panel (Perilipin/Calreticulin/pS6RP)
-RNA_SNR_DEFAULT = 0.3                    # perturbation-validity threshold for the subset
+DEFAULT_CHANNELS = [5, 9, 10]            # legacy fallback only; configs should define channels
 
 # Known lead genes per marker (for the qualitative lead-gene table); channels not present
 # are simply skipped.
@@ -129,39 +126,41 @@ def dist_metrics(sub_df, names):
 
 
 def print_dist(dist, label):
-    print(f"\n[{label}] population distance to real target (lower=closer) + copy-control baseline")
+    print(f"\n[{label}] population distance to real target (lower=closer) + source-control reference")
     print(f"{'channel':12} {'W(gen,tgt)':>11} {'W(src,tgt)':>11} {'gap_closed':>11}  read")
     for name, d in dist.items():
         gc = d["gap_closed_wd"]
-        read = ("model beats copy-control" if gc > 0.05 else
-                "≈ copy-control" if gc > -0.05 else "WORSE than copy-control")
+        read = ("closes source-target gap" if gc > 0.05 else
+                "near source-control reference" if gc > -0.05 else "worse than source-control reference")
         print(f"{name:12} {d['wd_gen']:11.4f} {d['wd_src']:11.4f} {gc:11.3f}  {read}")
 
 
 def main():
     global IMG
     argv = [a for a in sys.argv[1:]]
-    snr_thr = RNA_SNR_DEFAULT
-    if "--snr" in argv:
-        i = argv.index("--snr")
-        snr_thr = float(argv[i + 1])
-        del argv[i:i + 2]
     run = argv[0].rstrip("/")
     min_n = int(argv[1]) if len(argv) > 1 else 5
     epoch_arg = argv[2] if len(argv) > 2 else None
 
     use_initial, channels = None, DEFAULT_CHANNELS
     is_diet = False
+    data_index_path = ""
+    benchmark = ""
+    task_name = ""
     aj = f"{run}/args.json"
     if os.path.exists(aj):
         _a = json.load(open(aj))
         use_initial = _a.get("use_initial")
         channels = _a.get("channels") or DEFAULT_CHANNELS
+        data_index_path = _a.get("data_index_path", "") or ""
+        benchmark = _a.get("benchmark", "") or ""
+        task_name = _a.get("task_name", "") or ""
         _ip = _a.get("image_path", "")
         is_diet = "diet" in (_ip or "")
         if _ip:
             IMG = _ip if os.path.isabs(_ip) else os.path.join(REPO_ROOT, _ip)
     names = [CH_NAMES[c] for c in channels]          # PNG channel k -> CH_NAMES[channels[k]]
+    is_paper_core = _is_paper_core_run(run, data_index_path, benchmark, task_name)
 
     if epoch_arg is not None:
         epoch_dir = f"{run}/fid_samples/epoch-{epoch_arg}"
@@ -202,9 +201,17 @@ def main():
     print(f"run: {run}")
     print(f"use_initial: {use_initial}   epoch: {os.path.basename(epoch_dir)}   "
           f"panel(channels {channels}): {names}")
-    print(f"images: {len(df)}   perturbations(n>={min_n}): {len(gg)}   diet={is_diet}")
+    print(f"images: {len(df)}   perturbations(n>={min_n}): {len(gg)}   "
+          f"diet={is_diet}   crispr_paper_core={is_paper_core}")
 
-    summary = {"channels": channels, "names": names, "epoch": os.path.basename(epoch_dir)}
+    summary = {
+        "channels": channels,
+        "names": names,
+        "epoch": os.path.basename(epoch_dir),
+        "benchmark": benchmark or None,
+        "task_name": task_name or None,
+        "is_paper_core": is_paper_core,
+    }
 
     if is_diet:
         # Cross-gene ranking is degenerate with 2 conditions -> distribution metrics per condition.
@@ -215,22 +222,34 @@ def main():
             print_dist(d, f"diet:{cond}")
             summary["per_condition_dist"][cond] = d
     else:
-        # CRISPR: cross-gene ranking + direction, on full set and the rna_snr>=THR subset.
+        # CRISPR: cross-gene ranking + direction. The paper core reports original
+        # Perturb-Multi program-level marker direction.
         summary["full"] = metric_table(gg, names, use_initial, "FULL gene set")
-        snr = _load_rna_snr()
-        if snr is not None:
-            valid = [gene for gene in gg.index if snr.get(gene, 0.0) >= snr_thr]
-            ggv = gg.loc[gg.index.isin(valid)]
-            summary["rna_snr_subset"] = {"thr": snr_thr, "n_genes": len(ggv),
-                                         "metrics": metric_table(ggv, names, use_initial,
-                                         f"rna_snr>={snr_thr} subset (perturbation-validity, disclosed)")}
-            # stratified: hit (valid) vs non-hit
-            nonhit = gg.loc[~gg.index.isin(valid)]
-            if len(nonhit) >= 3:
-                metric_table(nonhit, names, use_initial, f"rna_snr<{snr_thr} (non-hit, for transparency)")
-        else:
-            print("\n(rna_snr table not found -> skipping subset; showing full set only)")
-        # pooled population metrics + copy-control baseline (per channel, all cells)
+        if is_paper_core:
+            program_map = _load_program_labels()
+            if program_map is not None:
+                ggp = gg.copy()
+                ggp["program"] = [program_map.get(gene) for gene in ggp.index]
+                ggp = ggp.dropna(subset=["program"])
+                by_program = ggp.groupby("program").mean(numeric_only=True)
+                by_program["n_genes"] = ggp.groupby("program").size()
+                summary["program_level"] = {
+                    "n_programs": int(len(by_program)),
+                    "n_genes": int(len(ggp)),
+                    "metrics": metric_table(
+                        by_program,
+                        names,
+                        use_initial,
+                        "original-paper program means",
+                    ),
+                    "gene_counts": {
+                        str(k): int(v) for k, v in by_program["n_genes"].to_dict().items()
+                    },
+                }
+                by_program.to_csv(f"{run}/aggregate_eval_by_program.csv")
+            else:
+                print("\n(program label table not found -> skipping program-level marker summary)")
+        # pooled population metrics + matched source-control reference (per channel, all cells)
         summary["dist_pooled"] = dist_metrics(df, names)
         print_dist(summary["dist_pooled"], "pooled (all genes)")
 
@@ -248,15 +267,34 @@ def main():
     print(f"\nsaved: {run}/aggregate_eval_by_gene.csv + aggregate_eval_summary.json")
 
 
-def _load_rna_snr():
-    """Per-gene rna_snr (perturbation validity) from the data-build diagnostic table."""
-    p = os.path.join(REPO_ROOT, "data/processed/perturbmulti/perturbation_effects.csv")
+def _is_paper_core_run(run, data_index_path="", benchmark="", task_name=""):
+    """Detect the original-program CRISPR paper-core line across native and baseline runs."""
+    fields = [
+        run,
+        data_index_path or "",
+        benchmark or "",
+        task_name or "",
+    ]
+    text = " ".join(str(v) for v in fields)
+    return (
+        "index_paper_programs" in text
+        or "crispr_paper" in text
+        or "paper_core" in text
+        or "crispr_paper_core" in text
+    )
+
+
+def _load_program_labels():
+    """Original Perturb-Multi program labels for CRISPR paper-core evaluation."""
+    p = os.path.join(REPO_ROOT, "data/processed/crispr/program_labels_paper.csv")
     if not os.path.exists(p):
         return None
     t = pd.read_csv(p)
-    if "rna_snr" not in t.columns or "target_gene" not in t.columns:
+    req = {"target_gene", "program", "role"}
+    if not req.issubset(t.columns):
         return None
-    return dict(zip(t["target_gene"], t["rna_snr"]))
+    t = t[t["role"] == "main_quantitative"].copy()
+    return dict(zip(t["target_gene"], t["program"]))
 
 
 def _jsonable(obj):

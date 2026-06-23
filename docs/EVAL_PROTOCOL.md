@@ -25,7 +25,7 @@ Report all metrics, but keep their roles separate.
 | Image quality / comparability | FIDc | conditional FID: per perturbation class, then averaged | lower better | class-balanced image realism |
 | Image quality / comparability | KIDo | overall KID | lower better | FID robustness check |
 | Image quality / comparability | KIDc | conditional KID | lower better | class-balanced KID |
-| Condition separability | MoA Acc / Macro-F1 / Weighted-F1 | classifier trained on real perturbed images, evaluated on generated images | higher better | auxiliary biological proxy if the real-image ceiling is above chance |
+| Condition separability | MoA Acc / Macro-F1 / Weighted-F1 | classifier trained on real perturbed images, evaluated on generated images | higher better | auxiliary biological proxy if the real-image ceiling is above chance; CRISPR paper core reports program-level labels |
 | Marker phenotype | gap_closed | `1 - W(gen,tgt) / W(ctrl,tgt)` on per-cell marker foreground means | higher better | primary Diet biological metric |
 | Marker phenotype | dir_corr / sign_agree | recovery of `(gen-ctrl)` vs `(real-ctrl)` perturbation direction across genes | higher better | primary CRISPR biological metric |
 
@@ -48,26 +48,25 @@ The Perturb-Multi biological question is different:
 Did the generated marker population move from control toward the treated marker population?
 ```
 
-The Diet 5K table proves the distinction. Copy-control has the best FID/KID even
-though it applies no perturbation:
+The Diet 5K table proves the distinction: the named generation baselines rank
+differently under image-realism and biological marker-transport criteria.
 
 | method | FIDo | FIDc | KIDo | KIDc | MoA-Acc |
 |---|---:|---:|---:|---:|---:|
-| copy_control | **7.96** | **12.01** | **0.0039** | **0.0057** | 49.92 |
 | PhenDiff | 10.92 | 13.97 | 0.0066 | 0.0075 | 60.69 |
 | IMPA | 52.29 | 55.43 | 0.0407 | 0.0424 | **63.97** |
 | Morpho-CellFlux | 31.26 | 35.43 | 0.0267 | 0.0291 | 54.93 |
 
 Conclusion: FID/KID remain required for external comparison, but cannot be used
-alone to claim biological success on this dataset. If a no-perturbation
-copy-control wins FID, then FID is rewarding same-batch image realism more than
-perturbation transport.
+alone to claim biological success on this dataset. Internal no-transport checks
+also show that same-batch image realism can be rewarded without perturbation
+transport, so named method comparisons must be interpreted alongside marker
+metrics.
 
 Why other papers can lean harder on FID: in many cell-image benchmarks, the
 visual feature distribution and the biological condition are more tightly
-coupled, and the null copy-control does not trivially win. Here the RGB image is
-a selected false-color rendering of marker channels; the marker shift is the
-biological endpoint.
+coupled. Here the RGB image is a selected false-color rendering of marker
+channels; the marker shift is the biological endpoint.
 
 ## 3. Sample Budget N
 
@@ -90,14 +89,14 @@ methods inside the same table.
 
 ## 4. Dataset Mapping
 
-| | Diet | CRISPR |
+| | Diet | CRISPR paper core |
 |---|---|---|
 | Perturbation | physiological state | target gene |
 | Control | adlib | non-targeting/control sgRNA |
-| Treated classes | fasted, hfd | 76 rna_snr-filtered genes |
-| Active panel | `[9,5,8]` Calreticulin / Perilipin / TOMM20 | `[0,14,5]` Alb / Rab7 / Perilipin |
+| Treated classes | fasted, hfd | 40 target genes grouped into 7 original-paper programs |
+| Active panel | `[9,5,8]` Calreticulin / Perilipin / TOMM20 | `[9,5,10]` Calreticulin / Perilipin / pS6RP |
 | Main biological metric | per-condition marker gap closure | direction recovery and pooled marker gap closure |
-| Current proposed run | `outputs/runs/diet/fid5k` | `outputs/runs/crispr/main` |
+| Current proposed run | `outputs/runs/diet/fid5k` | `outputs/runs/crispr/paper_core` |
 
 Diet is the strong physiological demonstration. CRISPR is the clean gene-identity
 benchmark but has weaker effects and should be reported distributionally.
@@ -110,8 +109,8 @@ MoA.
 
 | dataset | interpretation |
 |---|---|
-| Diet | usable: real treated images are separable above chance |
-| CRISPR | report only if real-image ceiling is substantially above 1/76 chance; otherwise say MoA is not informative for CRISPR |
+| Diet | usable: real treated images are separable above chance; this mirrors the Perturb-Multi VQ-VAE auxiliary task that predicts diet condition from morphology embeddings |
+| CRISPR paper core | report program-level `Program-Acc`, `Program-Macro-F1`, and `Program-Weighted-F1` over the 7 original-paper programs; gene-level MoA is supplementary only |
 
 MoA is still not a perfect biological metric. A method can increase condition
 classifier accuracy by producing class-specific artifacts. Read it together with
@@ -139,7 +138,7 @@ Interpretation:
 |---:|---|
 | 1 | generated distribution matches the real treated distribution |
 | 0 | no better than copying the control |
-| <0 | worse than copy-control |
+| <0 | farther from the target than the matched source-control reference |
 
 For CRISPR, also compute `dir_corr` and `sign_agree` across genes:
 
@@ -206,13 +205,13 @@ For outputs produced before this fix:
 
 ## 9. Implementation Status
 
-- [x] Copy-control diet + CRISPR exports.
-- [x] PhenDiff diet + CRISPR exports.
-- [x] IMPA diet export; CRISPR IMPA was previously blocked by corrupted FID cache and needs rerun.
+- [x] Internal source-control sanity checks archived; not part of the default paper table.
+- [x] PhenDiff / IMPA / StarGAN adapters target Diet and CRISPR paper core.
 - [x] FIDo/FIDc/KIDo/KIDc matched-N tooling.
 - [x] MoA classifier fixed to classify perturbation class (`mols`), not treated/control annotation.
 - [x] Diet 5K proposed eval and matched table.
 - [x] Reproducible Diet marker-distribution figure script.
 - [x] DDP mapping fix for future evals.
 - [ ] Rerun Diet 5K after DDP mapping fix for complete paired control gap closure.
-- [ ] Run CRISPR IMPA and CRISPR real-image MoA ceiling before reporting CRISPR MoA.
+- [ ] Run `crispr_paper` Morpho-CellFlux and baselines before reporting the paper CRISPR table.
+- [ ] Train/report program-level classifier ceiling before reporting CRISPR Program-Acc/F1.

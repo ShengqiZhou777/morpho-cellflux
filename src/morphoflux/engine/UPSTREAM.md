@@ -18,7 +18,8 @@ and unchanged. We only added a dataset/condition adapter + small fixes:
   (`perturbmulti_id`, `perturbmulti_idsig`, `diet_id`) with 3-channel images and
   task-specific condition dimensions.
 - `training/data_utils.py` — added `_load_perturbmulti()` for npz crops with config-driven
-  channel panels. Active panels are `[9,5,8]` for Diet and `[0,14,5]` for CRISPR.
+  channel panels. Active paper panels are `[9,5,8]` for Diet and `[9,5,10]` for
+  CRISPR paper core.
 - `training/dataloader.py` — added the Perturb-Multi/Diet train/test split branch.
 - `train.py` — added `perturbmulti_id` to the dataset list.
 - `training/eval_loop.py` — write a per-epoch copy of `trt2ctrl_idx.json`
@@ -32,7 +33,8 @@ and unchanged. We only added a dataset/condition adapter + small fixes:
 - Configs live in `configs/*.yaml` (single source of truth). The loader
   resolves a bare `--config NAME` against `MORPHOFLUX_CONFIG_DIR` (default
   `configs/`), or accepts an absolute `.yaml` path.
-- Data paths inside those YAMLs point at `data/processed/perturbmulti/` (this repo).
+- Data paths inside those YAMLs point at `data/processed/crispr/` and
+  `data/processed/diet/` (this repo).
 
 Any external CellFlux clone used during development is deprecated for this project. This
 absorbed copy under `src/morphoflux/engine/` is the source of truth.

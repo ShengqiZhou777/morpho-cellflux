@@ -28,24 +28,24 @@ paired image/protein/RNA assets from Perturb-Multi; the RNA h5ad is treated as a
 MERFISH readout for filtering/diagnostics and optional ablation, not as the main
 generative condition.
 
-Point the repository to a local Perturb-Multi asset tree:
-
-```bash
-export MORPHO_PHENOTYPING_ROOT=/path/to/morpho-phenotyping
-```
-
-The CRISPR factory expects the source files listed in
-`configs/crispr_hep.yaml`, including the paired manifest, extracted image npz
-directory, RNA/protein h5ad files, metadata decision table, evaluation panel,
-and the Perturb-Multi paper markdown.
-
-Diet scripts expect:
+Place the downloaded assets under `data/raw/` using the self-contained,
+per-dataset layout below. The configs and build scripts read these paths
+directly -- no external source tree or `MORPHO_PHENOTYPING_ROOT` variable is
+needed:
 
 ```text
-$MORPHO_PHENOTYPING_ROOT/assets/paired_filtered/diet/
-  manifests/manifest_diet_hep_paired.parquet
-  protein/protein_diet_hep_paired.h5ad
+data/raw/
+  crispr/    images/  manifest.parquet  rna.h5ad  protein.h5ad
+  diet/      images/  manifest.parquet  rna.h5ad  protein.h5ad
+  metadata/  eval_panel.json  decision_table.csv
+  Perturb-multimodal.md
 ```
+
+The CRISPR factory resolves these via the `RAW_ASSETS` map in
+`src/morphoflux/data/factory.py` (paired manifest, image npz directory,
+RNA/protein h5ad, metadata decision table, evaluation panel, and the
+Perturb-Multi paper markdown). The diet build/audit scripts read
+`data/raw/diet/` directly.
 
 ## 3. Build Derived Tables
 
@@ -53,7 +53,7 @@ CRISPR:
 
 ```bash
 python scripts/materialize_data.py --config configs/crispr_hep.yaml
-python scripts/build_perturbmulti_data.py
+python scripts/build_crispr_paper_data.py
 ```
 
 Diet:
@@ -78,21 +78,11 @@ NPROC=2 BATCH=16 USE_INITIAL=1 CFG=0.2 \
 bash scripts/train.sh
 ```
 
-CRISPR one-hot run:
+CRISPR paper-core one-hot run:
 
 ```bash
-OUT=outputs/runs/crispr/main \
-CONFIG=perturbmulti_train_id DATASET=perturbmulti_id \
-EPOCHS=20 EVAL_FREQ=5 FID_SAMPLES=5120 \
-NPROC=2 BATCH=16 USE_INITIAL=1 CFG=0.2 \
-bash scripts/train.sh
-```
-
-Optional CRISPR one-hot + RNA-signature ablation:
-
-```bash
-OUT=outputs/runs/crispr/idsig_ablation \
-CONFIG=ablations/perturbmulti_idsig DATASET=perturbmulti_idsig \
+OUT=outputs/runs/crispr/paper_core \
+CONFIG=crispr_paper_core DATASET=perturbmulti_id \
 EPOCHS=20 EVAL_FREQ=5 FID_SAMPLES=5120 \
 NPROC=2 BATCH=16 USE_INITIAL=1 CFG=0.2 \
 bash scripts/train.sh
@@ -104,7 +94,17 @@ Marker gap/direction summaries:
 
 ```bash
 python scripts/aggregate_eval.py outputs/runs/diet/main 5 9
-python scripts/aggregate_eval.py outputs/runs/crispr/main 5 19
+python scripts/aggregate_eval.py outputs/runs/crispr/paper_core 5 19
+```
+
+CRISPR paper-core program classifier:
+
+```bash
+python src/morphoflux/engine/moa/train_moa.py \
+  --config_path configs/crispr_paper_core.yaml \
+  --mode train \
+  --ckpt_path outputs/baselines/moa/crispr_paper/program_classifier.pth \
+  --label-map-csv data/processed/crispr/program_labels_paper.csv
 ```
 
 Diet marker distribution figure:
@@ -152,8 +152,8 @@ See `baselines/README.md` for per-method output contracts and GPU policy.
 - The data are unpaired; do not interpret one generated cell as the true future
   of one control cell.
 - FID/KID are reported for comparability but are not the primary biological
-  metric for Perturb-Multi. Copy-control can win FID/KID because same-batch
-  controls are realistic.
+  metric for Perturb-Multi. A source-control sanity check can score strongly on
+  FID/KID because same-batch controls are realistic.
 - A pre-fix 2-GPU Diet 5K eval produced 5120 PNGs but only 2560 paired
   treated->control mappings. Future evals include a DDP mapping gather fix.
 

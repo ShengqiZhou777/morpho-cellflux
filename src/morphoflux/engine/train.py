@@ -59,7 +59,7 @@ def main(args):
 
     logger.info(f"Initializing Dataset: {args.dataset}")
     transform_train = get_train_transform()
-    if args.dataset in ['bbbc021', 'rxrx1', 'cpg0000', 'perturbmulti_id', 'perturbmulti_idsig', 'diet_id']:
+    if args.dataset in ['bbbc021', 'rxrx1', 'cpg0000', 'perturbmulti_id', 'perturbmulti_idsig', 'diet_id', 'diet_id_18ch', 'phenoflux_diet']:
         args.num_tasks = distributed_mode.get_world_size()
         num_tasks = args.num_tasks
         args.global_rank = distributed_mode.get_rank()
@@ -156,21 +156,23 @@ def main(args):
                 "epoch": epoch,
             }
 
+        # Save checkpoint every epoch so training can be paused/resumed at any point
+        if args.output_dir and not args.eval_only:
+            save_model(
+                args=args,
+                model=model,
+                model_without_ddp=model_without_ddp,
+                optimizer=optimizer,
+                lr_schedule=lr_schedule,
+                loss_scaler=loss_scaler,
+                epoch=epoch,
+            )
+
         if args.output_dir and (
             (args.eval_frequency > 0 and (epoch + 1) % args.eval_frequency == 0)
             or args.eval_only
             or args.test_run
         ):
-            if not args.eval_only:
-                save_model(
-                    args=args,
-                    model=model,
-                    model_without_ddp=model_without_ddp,
-                    optimizer=optimizer,
-                    lr_schedule=lr_schedule,
-                    loss_scaler=loss_scaler,
-                    epoch=epoch,
-                )
             if args.distributed:
                 data_loader_train.sampler.set_epoch(0)
             if distributed_mode.is_main_process():

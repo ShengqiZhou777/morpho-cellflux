@@ -5,16 +5,18 @@ set -euo pipefail
 # imagefolders and IMPA-compatible `.npy` files from the same Morpho-CellFlux
 # configs used by the proposed method.
 
+BASELINE_DATA_ROOT="${BASELINE_DATA_ROOT:-outputs/baselines/_data}"
+
 python baselines/export_baseline_data.py \
   --config configs/diet_id.yaml \
   --benchmark diet \
-  --output outputs/baselines/_data/diet \
+  --output "$BASELINE_DATA_ROOT/diet" \
   --splits train,test \
   --workers "${EXPORT_WORKERS:-8}"
 
 python baselines/export_baseline_data.py \
-  --config configs/perturbmulti_train_id.yaml \
-  --benchmark crispr \
-  --output outputs/baselines/_data/crispr \
+  --config configs/crispr_paper_core.yaml \
+  --benchmark crispr_paper \
+  --output "$BASELINE_DATA_ROOT/crispr_paper" \
   --splits train,test \
   --workers "${EXPORT_WORKERS:-8}"

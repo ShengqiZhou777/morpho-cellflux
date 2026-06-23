@@ -14,18 +14,32 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 
 DEFAULT_RUNS = {
     "diet": {
-        "Morpho-CellFlux": "outputs/runs/diet/main",
-        "PhenDiff": "outputs/baselines/phendiff/diet",
-        "IMPA": "outputs/baselines/impa/diet",
-        "MorphoDiff": "outputs/baselines/morphodiff/diet",
         "StarGAN": "outputs/baselines/stargan/diet",
+        "PhenDiff": [
+            "outputs/baselines/phendiff/diet",
+            "outputs/baselines/phendiff/diet_v3",
+        ],
+        "IMPA": [
+            "outputs/baselines/impa/diet",
+            "outputs/baselines/impa/diet_v3",
+        ],
+        "CellFlux-style": [
+            "outputs/baselines/cellflux/diet",
+            "outputs/runs/diet/diet_id_v1",
+        ],
+        "MorphoDiff": "outputs/baselines/morphodiff/diet",
+        "Morpho-CellFlux": [
+            "outputs/runs/diet/main",
+            "outputs/runs/diet/diet_id_v3",
+        ],
     },
-    "crispr": {
-        "Morpho-CellFlux": "outputs/runs/crispr/main",
-        "PhenDiff": "outputs/baselines/phendiff/crispr",
-        "IMPA": "outputs/baselines/impa/crispr",
-        "MorphoDiff": "outputs/baselines/morphodiff/crispr",
-        "StarGAN": "outputs/baselines/stargan/crispr",
+    "crispr_paper": {
+        "StarGAN": "outputs/baselines/stargan/crispr_paper",
+        "PhenDiff": "outputs/baselines/phendiff/crispr_paper",
+        "IMPA": "outputs/baselines/impa/crispr_paper",
+        "CellFlux-style": "outputs/baselines/cellflux/crispr_paper",
+        "MorphoDiff": "outputs/baselines/morphodiff/crispr_paper",
+        "Morpho-CellFlux": "outputs/runs/crispr/paper_core",
     },
 }
 
@@ -106,11 +120,11 @@ def main() -> None:
     out = REPO_ROOT / args.output_dir
     out.mkdir(parents=True, exist_ok=True)
     diet = pd.DataFrame(diet_rows(DEFAULT_RUNS["diet"]))
-    crispr = pd.DataFrame(crispr_rows(DEFAULT_RUNS["crispr"]))
+    crispr_paper = pd.DataFrame(crispr_rows(DEFAULT_RUNS["crispr_paper"]))
     diet.to_csv(out / "diet_method_comparison.csv", index=False)
-    crispr.to_csv(out / "crispr_method_comparison.csv", index=False)
+    crispr_paper.to_csv(out / "crispr_paper_method_comparison.csv", index=False)
     print(f"wrote {out / 'diet_method_comparison.csv'}")
-    print(f"wrote {out / 'crispr_method_comparison.csv'}")
+    print(f"wrote {out / 'crispr_paper_method_comparison.csv'}")
 
 
 if __name__ == "__main__":

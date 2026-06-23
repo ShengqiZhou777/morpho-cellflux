@@ -14,18 +14,27 @@ case "$BENCHMARK" in
     CONFIG="configs/diet_id.yaml"
     OUT="outputs/baselines/impa/diet"
     ;;
-  crispr)
-    CONFIG="configs/perturbmulti_train_id.yaml"
-    OUT="outputs/baselines/impa/crispr"
+  crispr_paper)
+    CONFIG="configs/crispr_paper_core.yaml"
+    OUT="outputs/baselines/impa/crispr_paper"
     ;;
   *)
-    echo "Unknown BENCHMARK=$BENCHMARK; expected diet or crispr" >&2
+    echo "Unknown BENCHMARK=$BENCHMARK; expected diet or crispr_paper" >&2
     exit 2
     ;;
 esac
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-DATA_DIR="$REPO_ROOT/outputs/baselines/_data/$BENCHMARK"
+DATA_DIR="${DATA_DIR_OVERRIDE:-$REPO_ROOT/outputs/baselines/_data/$BENCHMARK}"
+if [[ ! -f "$DATA_DIR/manifest.json" ]]; then
+  case "$BENCHMARK" in
+    diet) LEGACY_DATA_DIR="$REPO_ROOT/outputs/baselines/_data/diet_v3" ;;
+  esac
+  if [[ -n "${LEGACY_DATA_DIR:-}" && -f "$LEGACY_DATA_DIR/manifest.json" ]]; then
+    echo "Using legacy exported baseline data: $LEGACY_DATA_DIR"
+    DATA_DIR="$LEGACY_DATA_DIR"
+  fi
+fi
 
 if [[ ! -f "$DATA_DIR/manifest.json" ]]; then
   echo "Missing $DATA_DIR/manifest.json; run: bash baselines/export_all_baseline_data.sh" >&2
@@ -67,7 +76,7 @@ PY
 
 CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-0,1}" python "$REPO_ROOT/baselines/impa_train.py" \
   --config "$CONFIG" \
-  --data-dir "outputs/baselines/_data/$BENCHMARK" \
+  --data-dir "$DATA_DIR" \
   --output "$OUT" \
   --benchmark "$BENCHMARK" \
   --epochs "$EPOCHS" \
@@ -89,7 +98,7 @@ fi
 
 python "$REPO_ROOT/baselines/impa_export_fid.py" \
   --config "$CONFIG" \
-  --data-dir "outputs/baselines/_data/$BENCHMARK" \
+  --data-dir "$DATA_DIR" \
   --checkpoint "$CHECKPOINT" \
   --output "$OUT" \
   --benchmark "$BENCHMARK" \

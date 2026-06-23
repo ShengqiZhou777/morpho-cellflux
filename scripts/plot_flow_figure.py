@@ -13,7 +13,7 @@ Design (intentionally NOT the CellFlux 4-colored-box / horizontal-arrow / bottom
 Usage:
   python scripts/plot_flow_figure.py outputs/runs/diet/main/interpolation --out fig.png \
       --channel 1 --channel-name Perilipin --cmap magma \
-      --montage-dir data/raw/diet_extracted_images --montage-channels 9 5 8 \
+      --montage-dir data/raw/diet/images --montage-channels 9 5 8 \
       --montage-keys <id1> <id2> <id3> <id4> --cond-name HFD
 """
 import argparse

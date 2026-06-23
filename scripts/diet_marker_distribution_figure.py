@@ -291,7 +291,7 @@ def main():
     config = load_run_config(run_dir)
     channels = config.get("channels") or DEFAULT_CHANNELS
     marker_names = [CH_NAMES[channel] for channel in channels]
-    image_path = args.image_path or config.get("image_path") or "data/raw/diet_extracted_images"
+    image_path = args.image_path or config.get("image_path") or "data/raw/diet/images"
     image_dir = Path(image_path)
     if not image_dir.is_absolute():
         image_dir = REPO_ROOT / image_dir

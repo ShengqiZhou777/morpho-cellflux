@@ -79,11 +79,11 @@ class MarkerProfileEncoder(nn.Module):
 
 
 # ---------------------------------------------------------------------------
-# CrossAttentionBlock — Q from UNet features, K/V from condition tokens
+# MACAttentionBlock — Q from UNet features, K/V from condition tokens
 # ---------------------------------------------------------------------------
 
-class CrossAttentionBlock(nn.Module):
-    """Cross-attention: UNet feature maps (Q) attend to marker profile tokens (K, V).
+class MACAttentionBlock(nn.Module):
+    """MAC attention: UNet feature maps (Q) attend to marker profile tokens (K, V).
 
     Follows the same pattern as the existing AttentionBlock in unet.py:
     GroupNorm -> projection -> attention -> zero-init output projection -> residual add.

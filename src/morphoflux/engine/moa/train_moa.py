@@ -14,6 +14,7 @@ import yaml
 from morphoflux.engine.training.dataloader import CellDataLoader_Eval
 import torchvision.transforms as T
 import numpy as np
+import pandas as pd
 from torchmetrics.image.fid import FrechetInceptionDistance
 from PIL import Image
 from sklearn.metrics import f1_score
@@ -67,6 +68,7 @@ class MOAClassifier(nn.Module):
         return outputs
 
 def save_checkpoint(model, optimizer, epoch, save_path):
+    Path(save_path).parent.mkdir(parents=True, exist_ok=True)
     state = {
         'epoch': epoch,
         'model_state': model.state_dict(),
@@ -89,7 +91,16 @@ def read_img_from_path(img_path):
     img = torch.from_numpy(np.array(img)).permute(2, 0, 1).float()
     return img
 
-def train_model(model, dataloader, criterion, optimizer, device, num_epochs=10, save_path="checkpoint_ood.pth"):
+def train_model(
+    model,
+    dataloader,
+    criterion,
+    optimizer,
+    device,
+    num_epochs=10,
+    save_path="checkpoint_ood.pth",
+    label_map=None,
+):
     model.to(device)
     start_epoch = 0
 
@@ -103,6 +114,8 @@ def train_model(model, dataloader, criterion, optimizer, device, num_epochs=10, 
             x_real_ctrl, x_real_trt = batch['X']
             images = torch.clamp(x_real_trt * 0.5 + 0.5, min=0.0, max=1.0).to(device)
             labels = batch['mols'].long().to(device)
+            if label_map is not None:
+                labels = label_map[labels]
             outputs = model(images)
             loss = criterion(outputs, labels)
 
@@ -119,7 +132,7 @@ def train_model(model, dataloader, criterion, optimizer, device, num_epochs=10, 
 
         save_checkpoint(model, optimizer, epoch, save_path)
 
-def evaluate_model(model, dataloader, device, id2y):
+def evaluate_model(model, dataloader, device, id2y, label_map=None):
     model.eval()
     correct = 0
     total = 0
@@ -133,6 +146,8 @@ def evaluate_model(model, dataloader, device, id2y):
             x_real_ctrl, x_real_trt = batch['X']
             images = torch.clamp(x_real_trt * 0.5 + 0.5, min=0.0, max=1.0).to(device)
             labels = batch['mols'].long().to(device)
+            if label_map is not None:
+                labels = label_map[labels]
             outputs = model(images)
             _, predicted = outputs.max(1)
 
@@ -162,7 +177,18 @@ def evaluate_model(model, dataloader, device, id2y):
         acc = 100. * class_correct[class_id] / class_total[class_id]
         print(f"Class {id2y[class_id]}: {acc:.2f}%, Total: {class_total[class_id]}")
 
-def evaluate_generated_image(model, img_root_path, device, mol2id, per_class_cap=None, seed=0, out_json=None):
+def evaluate_generated_image(
+    model,
+    img_root_path,
+    device,
+    mol2id,
+    per_class_cap=None,
+    seed=0,
+    out_json=None,
+    label_map=None,
+    id2label=None,
+    label_mode="molecule",
+):
     """Classify GENERATED images laid out as <img_root_path>/<class>/*.png.
 
     Imagefolder-driven (NOT test-loader driven): the true label is the folder/class, so it
@@ -172,6 +198,11 @@ def evaluate_generated_image(model, img_root_path, device, mol2id, per_class_cap
     """
     model.eval()
     id2mol = {v: k for k, v in mol2id.items()}
+    if id2label is None:
+        id2label = id2mol
+    label_map_np = None
+    if label_map is not None:
+        label_map_np = label_map.detach().cpu().numpy()
     rng = np.random.default_rng(seed)
     root = Path(img_root_path)
     classes = [c for c in mol2id if (root / c).is_dir()]
@@ -182,7 +213,8 @@ def evaluate_generated_image(model, img_root_path, device, mol2id, per_class_cap
     all_labels, all_preds = [], []
     bs = 64
     for cls in classes:
-        label = mol2id[cls]
+        mol_label = mol2id[cls]
+        label = int(label_map_np[mol_label]) if label_map_np is not None else mol_label
         files = sorted((root / cls).glob("*.png"))
         if per_class_cap and len(files) > per_class_cap:
             files = [files[i] for i in sorted(rng.permutation(len(files))[:per_class_cap])]
@@ -202,7 +234,7 @@ def evaluate_generated_image(model, img_root_path, device, mol2id, per_class_cap
     macro_f1 = float(f1_score(all_labels, all_preds, average="macro"))
     weighted_f1 = float(f1_score(all_labels, all_preds, average="weighted"))
     per_class = {
-        id2mol[c]: {"acc": 100.0 * class_correct[c] / class_total[c], "n": class_total[c]}
+        id2label[c]: {"acc": 100.0 * class_correct[c] / class_total[c], "n": class_total[c]}
         for c in class_total
     }
     print(f"Test Generated Image from: {img_root_path}")
@@ -212,6 +244,7 @@ def evaluate_generated_image(model, img_root_path, device, mol2id, per_class_cap
         print(f"  Class {name}: {d['acc']:.2f}%, Total: {d['n']}")
     result = {
         "img_root_path": str(img_root_path),
+        "label_mode": label_mode,
         "moa_acc": acc,
         "macro_f1": macro_f1,
         "weighted_f1": weighted_f1,
@@ -225,6 +258,70 @@ def evaluate_generated_image(model, img_root_path, device, mol2id, per_class_cap
     return result
 
 
+def compute_class_weights(dataset, mol2id, num_classes, device, label_map=None):
+    """Inverse-frequency weights for molecule or mapped program labels."""
+    counts = torch.zeros(num_classes, dtype=torch.float32)
+    label_map_cpu = label_map.detach().cpu() if label_map is not None else None
+    for mol in dataset.mols["trt"]:
+        mol_id = int(mol2id[mol])
+        label = int(label_map_cpu[mol_id]) if label_map_cpu is not None else mol_id
+        counts[label] += 1
+    if torch.any(counts == 0):
+        missing = torch.nonzero(counts == 0, as_tuple=False).flatten().tolist()
+        raise ValueError(f"cannot compute class weights; empty classes: {missing}")
+    weights = counts.sum() / (num_classes * counts)
+    return weights.to(device)
+
+
+def build_label_map(args, mol2id, device):
+    if not getattr(args, "label_map_csv", None):
+        return None, {v: k for k, v in mol2id.items()}, "molecule"
+
+    table = pd.read_csv(args.label_map_csv)
+    key_col = args.label_map_key
+    label_col = args.label_map_label
+    if key_col not in table.columns or label_col not in table.columns:
+        raise ValueError(
+            f"{args.label_map_csv} must contain columns {key_col!r} and {label_col!r}"
+        )
+
+    if "program_id" in table.columns:
+        table = table[table["program_id"].astype(int) >= 0].copy()
+        table["_label_id"] = table["program_id"].astype(int)
+    else:
+        names = sorted(table[label_col].dropna().astype(str).unique())
+        label2id = {name: i for i, name in enumerate(names)}
+        table["_label_id"] = table[label_col].astype(str).map(label2id).astype(int)
+
+    by_key = table.drop_duplicates(key_col).set_index(key_col)
+    missing = [mol for mol in mol2id if mol not in by_key.index]
+    if missing:
+        raise ValueError(
+            f"label map {args.label_map_csv} is missing {len(missing)} classes from the dataloader: "
+            f"{missing[:20]}"
+        )
+
+    label_map = torch.full((len(mol2id),), -1, dtype=torch.long, device=device)
+    for mol, mol_id in mol2id.items():
+        label_map[mol_id] = int(by_key.loc[mol, "_label_id"])
+    if torch.any(label_map < 0):
+        raise ValueError("label map contains unmapped classes")
+
+    id2label = (
+        table[["_label_id", label_col]]
+        .drop_duplicates("_label_id")
+        .sort_values("_label_id")
+        .set_index("_label_id")[label_col]
+        .astype(str)
+        .to_dict()
+    )
+    expected = set(range(len(id2label)))
+    observed = set(id2label)
+    if observed != expected:
+        raise ValueError(f"label ids must be contiguous from 0; observed {sorted(observed)}")
+    return label_map, id2label, label_col
+
+
 # Main function
 def main(args):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -232,25 +329,44 @@ def main(args):
     datamodule = CellDataLoader_Eval(args)
     train_loader = datamodule.train_dataloader()
     test_loader = datamodule.test_dataloader()
-    num_classes = len(datamodule.mol2id)  # MoA analog = perturbation class (CPD_NAME), NOT ANNOT (treated/ctrl)
+    label_map, id2label, label_mode = build_label_map(args, datamodule.mol2id, device)
+    num_classes = len(id2label)  # Default = CPD_NAME classes; with label map = paper program classes.
 
     model = MOAClassifier(num_classes=num_classes, device=device)
-    criterion = nn.CrossEntropyLoss()
+    class_weights = None
+    if getattr(args, "class_balanced_loss", False):
+        class_weights = compute_class_weights(
+            datamodule.training_set,
+            datamodule.mol2id,
+            num_classes,
+            device,
+            label_map=label_map,
+        )
+        print(f"Using class-balanced CE weights: {class_weights.detach().cpu().numpy().round(4).tolist()}")
+    criterion = nn.CrossEntropyLoss(weight=class_weights)
     optimizer = optim.Adam(model.parameters(), lr=0.001)
 
     start_epoch = 0
     if Path(args.ckpt_path).exists():
         start_epoch = load_checkpoint(model, optimizer, args.ckpt_path, device)
-    id2mol = {v: k for k, v in datamodule.mol2id.items()}
-    id2y = datamodule.id2y
     if args.mode == 'train':
-        train_model(model, train_loader, criterion, optimizer, device, num_epochs=args.epochs, save_path=args.ckpt_path)
+        train_model(
+            model,
+            train_loader,
+            criterion,
+            optimizer,
+            device,
+            num_epochs=args.epochs,
+            save_path=args.ckpt_path,
+            label_map=label_map,
+        )
 
-        evaluate_model(model, test_loader, device, id2mol)
+        evaluate_model(model, test_loader, device, id2label, label_map=label_map)
     elif args.mode == 'eval':
         assert args.img_root_path is not None, "Image root path is required for evaluation"
         evaluate_generated_image(model, args.img_root_path, device, datamodule.mol2id,
-                                 per_class_cap=args.gen_cap, seed=args.seed, out_json=args.out_json)
+                                 per_class_cap=args.gen_cap, seed=args.seed, out_json=args.out_json,
+                                 label_map=label_map, id2label=id2label, label_mode=label_mode)
 
 
 def load_yaml_config(yaml_path):
@@ -272,6 +388,10 @@ if __name__ == "__main__":
     parser.add_argument('--gen-cap', dest='gen_cap', type=int, default=None, help='Per-class cap on generated images (matched-N)')
     parser.add_argument('--seed', type=int, default=0, help='Seed for subsampling generated images')
     parser.add_argument('--out_json', type=str, default=None, help='Where to write the MoA result json')
+    parser.add_argument('--label-map-csv', dest='label_map_csv', type=str, default=None, help='Optional CSV mapping CPD_NAME to evaluation labels')
+    parser.add_argument('--label-map-key', dest='label_map_key', type=str, default='target_gene', help='Key column in --label-map-csv')
+    parser.add_argument('--label-map-label', dest='label_map_label', type=str, default='program', help='Label column in --label-map-csv')
+    parser.add_argument('--class-balanced-loss', dest='class_balanced_loss', action='store_true', help='Use inverse-frequency class weights for classifier training')
     cli_args = parser.parse_args()
     yaml_config = load_yaml_config(cli_args.config_path)
     yaml_config.update(vars(cli_args))

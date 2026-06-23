@@ -40,7 +40,7 @@ See [docs/SCIENTIFIC_STORY.md](docs/SCIENTIFIC_STORY.md) and
 | benchmark | condition | control / treated | active panel |
 |---|---|---|---|
 | Diet | diet state one-hot | adlib -> fasted / hfd | `[9,5,8]` = Calreticulin / Perilipin / TOMM20 |
-| CRISPR | target-gene identity one-hot | non-targeting -> gene perturbation | `[0,14,5]` = Alb / Rab7 / Perilipin |
+| CRISPR paper core | target-gene identity one-hot, evaluated by original-paper programs | non-targeting -> gene perturbation | `[9,5,10]` = Calreticulin / Perilipin / pS6RP |
 
 The RGB PNGs produced by this repo are false-color renderings of selected marker
 channels. They are not natural-color microscopy images.
@@ -49,11 +49,11 @@ channels. They are not natural-color microscopy images.
 
 ```text
 configs/                 Dataset/model configs.
-baselines/               Copy-control, PhenDiff, IMPA, StarGAN adapters and metric tables.
+baselines/               PhenDiff, IMPA, StarGAN, and internal sanity-check adapters.
 data/raw/                Local symlinks to raw assets; gitignored.
 data/processed/          Derived indices/embeddings; gitignored except placeholders.
 data/reports/            Small report tables intended for paper summaries.
-docs/                    Architecture, evaluation protocol, experiment log, story.
+docs/                    Public documentation map, architecture, evaluation protocol, story, results.
 scripts/                 Data build, train, eval, plotting, and launch scripts.
 src/morphoflux/          Data factory plus vendored CellFlux engine.
 outputs/                 Checkpoints, generated samples, logs, metrics; gitignored.
@@ -75,11 +75,14 @@ build first, then run `pip install -e .`.
 
 ## Data Preparation
 
-Raw Perturb-Multi assets are not included. Put or symlink the source asset tree
-somewhere locally and point the repo to it:
+Raw Perturb-Multi assets are not included. Download them (sources below) and
+place them under `data/raw/` in the self-contained, per-dataset layout the
+configs and build scripts read directly:
 
-```bash
-export MORPHO_PHENOTYPING_ROOT=/path/to/morpho-phenotyping
+```text
+data/raw/{crispr,diet}/   images/  manifest.parquet  rna.h5ad  protein.h5ad
+data/raw/metadata/        eval_panel.json  decision_table.csv
+data/raw/Perturb-multimodal.md
 ```
 
 Public data sources:
@@ -89,16 +92,15 @@ Public data sources:
 
 This pipeline does not require the GEO raw sequencing release. It uses the
 paired image/protein/RNA assets from Perturb-Multi; the RNA h5ad is treated as a
-MERFISH readout for filtering/diagnostics and optional ablation, not as the main
-generative condition.
+MERFISH readout for diagnostics, not as the main generative condition.
 
-The expected source layout is documented by
-[configs/crispr_hep.yaml](configs/crispr_hep.yaml). The CRISPR data builder
-materializes raw symlinks and derived tables:
+The per-dataset asset layout is resolved by `RAW_ASSETS` in
+[src/morphoflux/data/factory.py](src/morphoflux/data/factory.py). The CRISPR
+data builder verifies the raw assets and writes derived tables:
 
 ```bash
 python scripts/materialize_data.py --config configs/crispr_hep.yaml
-python scripts/build_perturbmulti_data.py
+python scripts/build_crispr_paper_data.py
 ```
 
 Build the Diet index and one-hot condition embedding:
@@ -135,8 +137,8 @@ bash scripts/train.sh
 CRISPR:
 
 ```bash
-OUT=outputs/runs/crispr/main \
-CONFIG=perturbmulti_train_id DATASET=perturbmulti_id \
+OUT=outputs/runs/crispr/paper_core \
+CONFIG=crispr_paper_core DATASET=perturbmulti_id \
 EPOCHS=20 EVAL_FREQ=5 FID_SAMPLES=5120 \
 NPROC=2 BATCH=16 USE_INITIAL=1 CFG=0.2 \
 bash scripts/train.sh
@@ -154,7 +156,7 @@ Aggregate marker-distribution and direction metrics:
 
 ```bash
 python scripts/aggregate_eval.py outputs/runs/diet/main 5 9
-python scripts/aggregate_eval.py outputs/runs/crispr/main 5 19
+python scripts/aggregate_eval.py outputs/runs/crispr/paper_core 5 19
 ```
 
 Diet marker distribution figure:
@@ -185,17 +187,17 @@ The current Diet 5K comparison shows why FID is not sufficient here:
 
 | method | FIDo | FIDc | KIDo | KIDc | MoA-Acc |
 |---|---:|---:|---:|---:|---:|
-| copy_control | **7.96** | **12.01** | **0.0039** | **0.0057** | 49.92 |
 | PhenDiff | 10.92 | 13.97 | 0.0066 | 0.0075 | 60.69 |
 | IMPA | 52.29 | 55.43 | 0.0407 | 0.0424 | **63.97** |
 | Morpho-CellFlux | 31.26 | 35.43 | 0.0267 | 0.0291 | 54.93 |
 
-Copy-control wins FID/KID because same-batch control images are realistic, even
-though they do not apply the perturbation. The proposed model's positive signal
-is the marker-distribution shift, especially HFD Calreticulin/Perilipin moving
-close to the treated population.
+An internal no-transport sanity check can score well on FID/KID because
+same-batch control images are realistic. For the paper table, we keep named
+generation baselines separate from that check. The proposed model's positive
+signal is the marker-distribution shift, especially HFD Calreticulin/Perilipin
+moving close to the treated population.
 
-Full logs and caveats are in [docs/EXPERIMENTS.md](docs/EXPERIMENTS.md).
+The compact public result snapshot is in [docs/RESULTS.md](docs/RESULTS.md).
 
 ## Reproducibility Notes
 

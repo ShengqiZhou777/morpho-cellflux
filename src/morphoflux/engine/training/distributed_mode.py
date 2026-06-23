@@ -78,5 +78,6 @@ def init_distributed_mode(args):
         world_size=args.world_size,
         rank=args.rank,
         timeout=timedelta(hours=1),
+        device_id=torch.device(f"cuda:{args.gpu}"),
     )
     torch.distributed.barrier()

@@ -4,24 +4,37 @@ set -euo pipefail
 BENCHMARK="${BENCHMARK:-diet}"
 NUM_ITERS="${NUM_ITERS:-50000}"
 BATCH="${BATCH:-16}"
+NUM_WORKERS="${NUM_WORKERS:-8}"
+SAVE_STEP="${SAVE_STEP:-10000}"
+SAMPLE_STEP="${SAMPLE_STEP:-$((NUM_ITERS / 5))}"
+RESUME_ITERS="${RESUME_ITERS:-}"
 
 case "$BENCHMARK" in
   diet)
     CONFIG="configs/diet_id.yaml"
     OUT="outputs/baselines/stargan/diet"
     ;;
-  crispr)
-    CONFIG="configs/perturbmulti_train_id.yaml"
-    OUT="outputs/baselines/stargan/crispr"
+  crispr_paper)
+    CONFIG="configs/crispr_paper_core.yaml"
+    OUT="outputs/baselines/stargan/crispr_paper"
     ;;
   *)
-    echo "Unknown BENCHMARK=$BENCHMARK; expected diet or crispr" >&2
+    echo "Unknown BENCHMARK=$BENCHMARK; expected diet or crispr_paper" >&2
     exit 2
     ;;
 esac
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-DATA_DIR="$REPO_ROOT/outputs/baselines/_data/$BENCHMARK"
+DATA_DIR="${DATA_DIR_OVERRIDE:-$REPO_ROOT/outputs/baselines/_data/$BENCHMARK}"
+if [[ ! -f "$DATA_DIR/manifest.json" ]]; then
+  case "$BENCHMARK" in
+    diet) LEGACY_DATA_DIR="$REPO_ROOT/outputs/baselines/_data/diet_v3" ;;
+  esac
+  if [[ -n "${LEGACY_DATA_DIR:-}" && -f "$LEGACY_DATA_DIR/manifest.json" ]]; then
+    echo "Using legacy exported baseline data: $LEGACY_DATA_DIR"
+    DATA_DIR="$LEGACY_DATA_DIR"
+  fi
+fi
 STARGAN_ROOT="$REPO_ROOT/baselines/external/stargan"
 RUN_ROOT="$REPO_ROOT/$OUT/external_checkpoints"
 
@@ -39,6 +52,11 @@ PY
 
 mkdir -p "$RUN_ROOT/logs" "$RUN_ROOT/models" "$RUN_ROOT/samples" "$RUN_ROOT/results"
 
+RESUME_ARGS=()
+if [[ -n "$RESUME_ITERS" ]]; then
+  RESUME_ARGS=(--resume_iters "$RESUME_ITERS")
+fi
+
 (
   cd "$STARGAN_ROOT"
   CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-0}" python main.py \
@@ -48,15 +66,17 @@ mkdir -p "$RUN_ROOT/logs" "$RUN_ROOT/models" "$RUN_ROOT/samples" "$RUN_ROOT/resu
     --image_size 128 \
     --rafd_crop_size 128 \
     --batch_size "$BATCH" \
+    --num_workers "$NUM_WORKERS" \
     --num_iters "$NUM_ITERS" \
     --num_iters_decay "$((NUM_ITERS / 2))" \
-    --model_save_step "$NUM_ITERS" \
-    --sample_step "$((NUM_ITERS / 5))" \
+    --model_save_step "$SAVE_STEP" \
+    --sample_step "$SAMPLE_STEP" \
     --log_dir "$RUN_ROOT/logs" \
     --model_save_dir "$RUN_ROOT/models" \
     --sample_dir "$RUN_ROOT/samples" \
     --result_dir "$RUN_ROOT/results" \
-    --use_tensorboard false
+    --use_tensorboard false \
+    "${RESUME_ARGS[@]}"
 )
 
 CHECKPOINT="$RUN_ROOT/models/${NUM_ITERS}-G.ckpt"
@@ -72,7 +92,7 @@ fi
 
 python "$REPO_ROOT/baselines/stargan_export_fid.py" \
   --config "$CONFIG" \
-  --data-dir "outputs/baselines/_data/$BENCHMARK" \
+  --data-dir "$DATA_DIR" \
   --checkpoint "$CHECKPOINT" \
   --output "$OUT" \
   --benchmark "$BENCHMARK" \

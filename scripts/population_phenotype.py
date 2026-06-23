@@ -28,7 +28,7 @@ from scipy.stats import mannwhitneyu
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # Default image dir; overridden per-run from the run's args.json image_path in main()
 # so eval reads the SAME npz cells the run trained on (e.g. diet vs CRISPR).
-IMG = os.path.join(REPO_ROOT, "data/raw/extracted_images")
+IMG = os.path.join(REPO_ROOT, "data/raw/crispr/images")
 # phenotype -> (RGB index, npz channel, reducer name)
 PHENO = {"lipid": (0, 5, "puncta"), "upr": (1, 9, "mean"), "mtor": (2, 10, "mean")}
 LABEL = {"lipid": "Perilipin puncta (top-2% mean)",

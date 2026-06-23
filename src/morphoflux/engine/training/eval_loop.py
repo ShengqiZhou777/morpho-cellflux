@@ -93,13 +93,13 @@ class CFGScaledModel(ModelWrapper):
         t = torch.zeros(x.shape[0], device=x.device) + t
 
         if cfg_scale != 0.0:
-            with torch.cuda.amp.autocast(), torch.no_grad():
+            with torch.amp.autocast("cuda"), torch.no_grad():
                 conditional = self.model(x, t, extra=extra)
                 condition_free = self.model(x, t, extra={})
             result = (1.0 + cfg_scale) * conditional - cfg_scale * condition_free
         else:
             # Model is fully conditional, no cfg weighting needed
-            with torch.cuda.amp.autocast(), torch.no_grad():
+            with torch.amp.autocast("cuda"), torch.no_grad():
                 result = self.model(x, t, extra=extra)
 
         self.nfe_counter += 1
@@ -127,6 +127,11 @@ def eval_model(
     interpolate: bool = False,
 ):
     gc.collect()
+    _model = model.module if hasattr(model, 'module') else model
+    _model = getattr(_model, 'model', _model)  # unwrap EMA if present
+    _use_mac = getattr(_model, 'use_mac', False)
+    _use_ccm = getattr(_model, 'use_ccm', False)
+    _use_marker_module = _use_mac or _use_ccm
     cfg_scaled_model = CFGScaledModel(model=model)
     cfg_scaled_model.train(False)
 
@@ -167,10 +172,16 @@ def eval_model(
         samples = None
         labels = None
 
-        # Build extra conditioning dict (may include marker profile)
+        # Build extra conditioning dict (may include marker profile for MAC or concat)
         eval_extra = {"concat_conditioning": z_emb_trg}
         if "marker_profile" in batch:
-            eval_extra["marker_profile"] = batch["marker_profile"].to(device)
+            mp = batch["marker_profile"].to(device)
+            if _use_marker_module:
+                eval_extra["marker_profile"] = mp
+            else:
+                eval_extra["concat_conditioning"] = torch.cat(
+                    [eval_extra["concat_conditioning"], mp], dim=1
+                )
 
         if num_synthetic < fid_samples:
             cfg_scaled_model.reset_nfe_counter()

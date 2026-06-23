@@ -13,7 +13,7 @@ if [[ -z "$TORCHRUN" ]]; then
   exit 127
 fi
 
-OUT=${OUT:-$PROJECT_DIR/outputs/perturbmulti_run}
+OUT=${OUT:-$PROJECT_DIR/outputs/runs/crispr/paper_core}
 BATCH=${BATCH:-16}          # per-GPU batch size. 16 uses about 25GB and is safe through FID eval on a 32GB card.
 ACCUM=${ACCUM:-1}           # gradient accumulation. Effective batch = BATCH * ACCUM * NPROC, no extra memory.
 EPOCHS=${EPOCHS:-40}
@@ -23,8 +23,27 @@ NPROC=${NPROC:-2}
 USE_INITIAL=${USE_INITIAL:-1}   # 0 = noise to target, 1 = control init, 2 = control plus noise.
 NOISE_LEVEL=${NOISE_LEVEL:-0.2} # noise added to the control image when USE_INITIAL=2.
 CFG=${CFG:-0.2}                 # classifier-free guidance scale at sampling.
-CONFIG=${CONFIG:-perturbmulti_train_id}        # config name under configs/, selects the data index and embedding.
+CONFIG=${CONFIG:-crispr_paper_core}      # config name under configs/, selects the data index and embedding.
 DATASET=${DATASET:-perturbmulti_id}           # model arch. perturbmulti_id has condition_dim 204 (gene-identity one-hot).
+ODE_OPTIONS=${ODE_OPTIONS:-'{"step_size": 0.02}'}
+FOREGROUND_LOSS=${FOREGROUND_LOSS:-0}
+FOREGROUND_THRESHOLD=${FOREGROUND_THRESHOLD:-0.05}
+FOREGROUND_WEIGHT=${FOREGROUND_WEIGHT:-5.0}
+BACKGROUND_WEIGHT=${BACKGROUND_WEIGHT:-0.1}
+TEST_RUN=${TEST_RUN:-0}
+
+EXTRA_ARGS=()
+if [[ "$FOREGROUND_LOSS" == "1" ]]; then
+  EXTRA_ARGS+=(
+    --foreground_loss
+    --foreground_threshold "$FOREGROUND_THRESHOLD"
+    --foreground_weight "$FOREGROUND_WEIGHT"
+    --background_weight "$BACKGROUND_WEIGHT"
+  )
+fi
+if [[ "$TEST_RUN" == "1" ]]; then
+  EXTRA_ARGS+=(--test_run)
+fi
 
 mkdir -p "$OUT"
 cd "$PROJECT_DIR"
@@ -35,5 +54,5 @@ PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \
   --use_initial "$USE_INITIAL" --noise_level "$NOISE_LEVEL" --use_ema --skewed_timesteps \
   --class_drop_prob 0.2 --cfg_scale "$CFG" \
   --eval_frequency "$EVAL_FREQ" --compute_fid --fid_samples "$FID_SAMPLES" \
-  --ode_options '{"step_size": 0.02}' --save_fid_samples \
-  --output_dir "$OUT" 2>&1 | tee -a "$OUT/train_stdout.log"
+  --ode_options "$ODE_OPTIONS" --save_fid_samples \
+  --output_dir "$OUT" "${EXTRA_ARGS[@]}" 2>&1 | tee -a "$OUT/train_stdout.log"

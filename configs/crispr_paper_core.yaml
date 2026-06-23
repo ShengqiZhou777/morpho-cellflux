@@ -1,0 +1,28 @@
+# Perturb-Multi hepatocytes -- paper-line CRISPR core program subset.
+# The model remains target-gene conditioned, but the evaluation groups genes
+# into original Perturb-Multi biological programs for Program-Acc/F1 reporting.
+# Core image panel = [9,5,10] = Calreticulin / Perilipin / pS6RP, matching the
+# UPR / steatosis / mTOR story supported by the Perturb-Multi paper.
+task_name: crispr_paper_core
+
+ood_set: Null
+mol_list: Null
+trainable_emb: False
+dataset_name: 'perturbmulti'
+n_channels: 3
+channels: [9, 5, 10]   # npz indices: Calreticulin(9), Perilipin(5), pS6RP(10)
+multimodal: False
+batch_correction: False
+batch_key: Null
+use_condition_embeddings: False
+add_controls: False
+condition_embedding_dimension: null
+modality_list:
+  - Gene
+
+image_path: data/raw/crispr/images
+data_index_path: data/processed/crispr/index_paper_programs.csv
+embedding_path: data/processed/crispr/embedding_gene_identity.csv
+
+augment_train: False
+normalize: False

@@ -3,22 +3,12 @@ project:
   description: Data factory for Perturb-Multi CRISPR hepatocytes.
 
 paths:
-  # Directory containing the Perturb-Multi assets listed below.
-  # Example:
-  #   export MORPHO_PHENOTYPING_ROOT=/path/to/morpho-phenotyping
-  source_root: ${MORPHO_PHENOTYPING_ROOT}
+  # Raw Perturb-Multi assets are self-contained under data/raw/. The per-dataset
+  # layout (crispr/, diet/, metadata/) is defined by RAW_ASSETS in
+  # src/morphoflux/data/factory.py.
   raw_dir: data/raw
   processed_dir: data/processed
   reports_dir: data/reports
-
-source_assets:
-  manifest: assets/paired_filtered/crispr/manifests/manifest_crispr_hep_paired.parquet
-  extracted_images: assets/paired_filtered/crispr/extracted_images
-  rna_h5ad: assets/paired_filtered/crispr/rna/RNA_crispr_hep_paired.h5ad
-  protein_h5ad: assets/paired_filtered/crispr/protein/protein_crispr_hep_paired.h5ad
-  decision_table: assets/paired_filtered/metadata/v6_decision_table.csv
-  eval_panel: assets/paired_filtered/metadata/eval_panel.json
-  paper: literature/Perturb-multimodal/Perturb-multimodal.md
 
 data:
   image_key: x

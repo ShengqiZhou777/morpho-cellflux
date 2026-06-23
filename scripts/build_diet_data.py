@@ -27,22 +27,15 @@ import pandas as pd
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT = os.path.join(ROOT, "data/processed/diet")
-SOURCE_ROOT = os.environ.get(
-    "MORPHO_PHENOTYPING_ROOT",
-    os.path.join(ROOT, "data/source/morpho-phenotyping"),
-)
-MANIFEST = os.path.join(
-    SOURCE_ROOT,
-    "assets/paired_filtered/diet/manifests/manifest_diet_hep_paired.parquet",
-)
+MANIFEST = os.path.join(ROOT, "data/raw/diet/manifest.parquet")
 
 CONTROL = "adlib"
 CONDITIONS = ["adlib", "fasted", "hfd"]  # embedding row order
 
 # The engine only iterates the 'train' and 'test' folds. Fold the original three-way
 # split as: train -> training fold, val -> in-loop eval fold, test -> a separate
-# held-out index. This mirrors scripts/build_perturbmulti_data.py so diet and crispr
-# share the same split semantics (without this remap the ~27k `val` cells were silently
+# held-out index. This mirrors the CRISPR paper-core split semantics
+# (without this remap the ~27k `val` cells were silently
 # dropped, since the loader never reads a 'val' fold).
 TRAIN_SPLIT = {"train": "train", "val": "test"}
 HELDOUT_SPLIT = {"test": "test"}

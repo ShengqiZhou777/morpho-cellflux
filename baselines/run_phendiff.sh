@@ -16,18 +16,27 @@ case "$BENCHMARK" in
     CONFIG="configs/diet_id.yaml"
     OUT="outputs/baselines/phendiff/diet"
     ;;
-  crispr)
-    CONFIG="configs/perturbmulti_train_id.yaml"
-    OUT="outputs/baselines/phendiff/crispr"
+  crispr_paper)
+    CONFIG="configs/crispr_paper_core.yaml"
+    OUT="outputs/baselines/phendiff/crispr_paper"
     ;;
   *)
-    echo "Unknown BENCHMARK=$BENCHMARK; expected diet or crispr" >&2
+    echo "Unknown BENCHMARK=$BENCHMARK; expected diet or crispr_paper" >&2
     exit 2
     ;;
 esac
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-DATA_DIR="$REPO_ROOT/outputs/baselines/_data/$BENCHMARK"
+DATA_DIR="${DATA_DIR_OVERRIDE:-$REPO_ROOT/outputs/baselines/_data/$BENCHMARK}"
+if [[ ! -f "$DATA_DIR/manifest.json" ]]; then
+  case "$BENCHMARK" in
+    diet) LEGACY_DATA_DIR="$REPO_ROOT/outputs/baselines/_data/diet_v3" ;;
+  esac
+  if [[ -n "${LEGACY_DATA_DIR:-}" && -f "$LEGACY_DATA_DIR/manifest.json" ]]; then
+    echo "Using legacy exported baseline data: $LEGACY_DATA_DIR"
+    DATA_DIR="$LEGACY_DATA_DIR"
+  fi
+fi
 RUN_PARENT="$REPO_ROOT/$OUT/external_checkpoints"
 PHENDIFF_ROOT="$REPO_ROOT/baselines/external/phendiff"
 PIPELINE="$RUN_PARENT/phendiff/$BENCHMARK/full_pipeline_save"
@@ -90,7 +99,7 @@ fi
 
 python "$REPO_ROOT/baselines/phendiff_export_fid.py" \
   --config "$CONFIG" \
-  --data-dir "outputs/baselines/_data/$BENCHMARK" \
+  --data-dir "$DATA_DIR" \
   --checkpoint "$PIPELINE" \
   --output "$OUT" \
   --benchmark "$BENCHMARK" \

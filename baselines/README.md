@@ -11,8 +11,9 @@ are separate benchmark tasks using the same engine:
 
 - diet: diet-state condition, diet-specific marker panel
   `[9, 5, 8]` = Calreticulin / Perilipin / TOMM20.
-- CRISPR: target-gene identity condition, CRISPR-specific marker panel
-  `[0, 14, 5]` = Alb / Rab7 / Perilipin.
+- CRISPR paper core: target-gene identity condition, reported by original
+  Perturb-Multi programs, marker panel `[9, 5, 10]` =
+  Calreticulin / Perilipin / pS6RP.
 
 The task split is for evaluation clarity, not because the paper proposes two
 different models.
@@ -28,7 +29,7 @@ method-comparison table should use named perturbation-generation methods:
 | IMPA | GAN/AdaIN image perturbation autoencoder | adapter scripts added |
 | MorphoDiff | perturbation-encoding diffusion baseline | adapter pending; use after PhenDiff/IMPA |
 | StarGAN / CycleGAN | classic image-to-image GAN baseline, supplement if needed | StarGAN adapter scripts added |
-| CellFlux baseline | shared-panel/original recipe | existing outputs |
+| CellFlux-style baseline | shared-panel CellFlux-engine recipe, not the original public CellFlux benchmark | existing outputs |
 | Morpho-CellFlux | proposed method | existing outputs |
 
 Copy-control is implemented as an internal null/sanity baseline, not as a
@@ -69,29 +70,30 @@ python scripts/aggregate_eval.py outputs/baselines/<method>/<benchmark> 5 0
 
 Keep method-comparison outputs separate from proposed-method runs:
 
-| Method | Diet output | CRISPR output |
+| Method | Diet output | CRISPR paper output |
 |---|---|---|
-| Copy-control | `outputs/baselines/copy_control/diet` | `outputs/baselines/copy_control/crispr` |
-| PhenDiff | `outputs/baselines/phendiff/diet` | `outputs/baselines/phendiff/crispr` |
-| IMPA | `outputs/baselines/impa/diet` | `outputs/baselines/impa/crispr` |
-| StarGAN | `outputs/baselines/stargan/diet` | `outputs/baselines/stargan/crispr` |
-| MorphoDiff | `outputs/baselines/morphodiff/diet` | `outputs/baselines/morphodiff/crispr` |
-| No-control diffusion/FM | `outputs/baselines/no_control_fm/diet` | `outputs/baselines/no_control_fm/crispr` |
+| PhenDiff | `outputs/baselines/phendiff/diet` | `outputs/baselines/phendiff/crispr_paper` |
+| IMPA | `outputs/baselines/impa/diet` | `outputs/baselines/impa/crispr_paper` |
+| StarGAN | `outputs/baselines/stargan/diet` | `outputs/baselines/stargan/crispr_paper` |
+| MorphoDiff | `outputs/baselines/morphodiff/diet` | `outputs/baselines/morphodiff/crispr_paper` |
+| No-control diffusion/FM | `outputs/baselines/no_control_fm/diet` | `outputs/baselines/no_control_fm/crispr_paper` |
 
 Existing proposed-method runs remain:
 
 | Benchmark | Proposed output |
 |---|---|
 | Diet | `outputs/runs/diet/main` |
-| CRISPR | `outputs/runs/crispr/main` |
+| CRISPR paper core | `outputs/runs/crispr/paper_core` |
 
-Shared-panel CellFlux baselines, when included, should use the same public
-baseline namespace rather than internal training run names:
+Shared-panel CellFlux-style baselines, when included, should use the same public
+baseline namespace rather than internal training run names. Do not call these
+runs "original CellFlux" unless they were produced by the unmodified upstream
+repository and original benchmark protocol.
 
 | Baseline role | Output |
 |---|---|
 | Diet shared-panel CellFlux | `outputs/baselines/cellflux/diet` |
-| CRISPR shared-panel CellFlux | `outputs/baselines/cellflux/crispr` |
+| CRISPR paper shared-panel CellFlux | `outputs/baselines/cellflux/crispr_paper` |
 
 ## Shared exported data
 
@@ -125,9 +127,18 @@ bash baselines/run_paper_baselines.sh
 EXPORT_WORKERS=16 bash baselines/run_paper_baselines.sh
 ```
 
-This runs only non-proposed baselines: shared exports, copy-control, PhenDiff,
-IMPA, and StarGAN for each benchmark, then collects table rows. It skips any
+This runs only non-proposed paper baselines: shared exports, PhenDiff, IMPA,
+and StarGAN for each benchmark, then collects table rows. It skips any
 method/benchmark that already has `aggregate_eval_summary.json`.
+
+Copy-control is an internal sanity check, not a paper method row. Run it only
+when explicitly needed:
+
+```bash
+INCLUDE_COPY_CONTROL=1 bash baselines/run_paper_baselines.sh
+# or, without the full queue:
+BENCHMARKS="diet" bash baselines/run_phendiff.sh
+```
 
 Run individual external adapters when debugging a narrower queue:
 
@@ -137,8 +148,8 @@ BENCHMARK=diet bash baselines/run_impa.sh
 BENCHMARK=diet bash baselines/run_stargan.sh
 ```
 
-Switch `BENCHMARK=crispr` for the CRISPR task after the diet adapters are
-validated.
+Switch `BENCHMARK=crispr_paper` for the paper CRISPR task after the diet
+adapters are validated.
 
 After each external baseline is evaluated with `scripts/aggregate_eval.py`, collect
 paper-table rows with:

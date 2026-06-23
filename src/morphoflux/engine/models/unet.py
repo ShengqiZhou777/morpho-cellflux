@@ -479,10 +479,11 @@ class UNetModel(nn.Module):
     input_projection: bool = True
     condition_dim: int = 1224 # 1225 for cpg000, 1024 for bbbc021, 200 for rxrx1
 
-    # --- Marker-aware cross-attention (Direction A) ---
-    use_marker_cross_attn: bool = False
+    # --- MAC (Marker-Aware Conditioning) ---
+    use_mac: bool = False              # bottleneck cross-attention from marker tokens
+    use_ccm: bool = False              # per-channel FiLM modulation at output
     marker_profile_dim: int = 18       # number of marker channels in the full profile
-    marker_cross_attn_resolutions: Tuple[int] = (8,)  # ds factors where cross-attn is applied
+    mac_resolutions: Tuple[int] = (8,)  # ds factors where MAC attention is applied
 
     image_size: int = -1  # not used...
     _target_: str = "lib.models.gd_unet.UNetModel"
@@ -614,36 +615,38 @@ class UNetModel(nn.Module):
         )
         self._feature_size += ch
 
-        # --- Marker-aware cross-attention ---
+        # --- PhenoFlux modules: MAC (cross-attention) + CCM (per-channel FiLM) ---
+        # marker_encoder is shared by both MAC and CCM — created if either is enabled
         self.marker_encoder = None
-        self.cross_attn_blocks = nn.ModuleList([])
+        self.mac_blocks = nn.ModuleList([])
         self.ccm = None
-        if self.use_marker_cross_attn:
+        if self.use_mac or self.use_ccm:
             from morphoflux.engine.models.mac import (
                 MarkerProfileEncoder,
-                CrossAttentionBlock,
+                MACAttentionBlock,
                 ChannelConditionModulation,
             )
             self.marker_encoder = MarkerProfileEncoder(
                 in_channels=self.marker_profile_dim,
                 hidden_dim=self.time_embed_dim // 2,  # 256 for default model_channels=128
             )
-            # One cross-attention block per resolution in marker_cross_attn_resolutions
-            # (typically just the bottleneck at ds=8)
-            for _ in self.marker_cross_attn_resolutions:
-                self.cross_attn_blocks.append(
-                    CrossAttentionBlock(
-                        channels=ch,  # channels at the bottleneck
-                        context_dim=self.time_embed_dim // 2,
-                        num_heads=max(1, ch // 64),  # 4 heads for ch=256
-                        use_checkpoint=self.use_checkpoint,
+            # MAC: bottleneck cross-attention
+            if self.use_mac:
+                for _ in self.mac_resolutions:
+                    self.mac_blocks.append(
+                        MACAttentionBlock(
+                            channels=ch,  # channels at the bottleneck
+                            context_dim=self.time_embed_dim // 2,
+                            num_heads=max(1, ch // 64),  # 4 heads for ch=256
+                            use_checkpoint=self.use_checkpoint,
+                        )
                     )
-                )
             # CCM: per-channel FiLM modulation before final output
-            self.ccm = ChannelConditionModulation(
-                token_dim=self.time_embed_dim // 2,
-                num_channels=self.out_channels,
-            )
+            if self.use_ccm:
+                self.ccm = ChannelConditionModulation(
+                    token_dim=self.time_embed_dim // 2,
+                    num_channels=self.out_channels,
+                )
 
         self.output_blocks = nn.ModuleList([])
         for level, mult in list(enumerate(self.channel_mult))[::-1]:
@@ -745,11 +748,15 @@ class UNetModel(nn.Module):
             hs.append(h)
         h = self.middle_block(h, emb)
 
-        # --- Apply marker-aware cross-attention at the bottleneck ---
-        if self.use_marker_cross_attn and "marker_profile" in extra:
+        # --- Compute marker tokens if any PhenoFlux module is active ---
+        marker_tokens = None
+        if self.marker_encoder is not None and "marker_profile" in extra:
             marker_tokens = self.marker_encoder(extra["marker_profile"])
-            for ca_block in self.cross_attn_blocks:
-                h = ca_block(h, marker_tokens)
+
+        # --- Apply MAC: bottleneck cross-attention ---
+        if self.use_mac and marker_tokens is not None:
+            for mac_block in self.mac_blocks:
+                h = mac_block(h, marker_tokens)
 
         for module in self.output_blocks:
             h = torch.cat([h, hs.pop()], dim=1)
@@ -758,8 +765,8 @@ class UNetModel(nn.Module):
         h = h.type(x.dtype)
         result = self.out(h)
 
-        # --- Apply CCM: per-channel modulation on the output ---
-        if self.ccm is not None and "marker_profile" in extra:
+        # --- Apply CCM: per-channel FiLM modulation on the output ---
+        if self.ccm is not None and marker_tokens is not None:
             result = self.ccm(marker_tokens, result)
 
         return result

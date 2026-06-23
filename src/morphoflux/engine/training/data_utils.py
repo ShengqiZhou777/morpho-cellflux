@@ -147,7 +147,9 @@ def read_files_pert(file_names, mols, mol2id, y2id, dose, y, transform, image_pa
             'batch': batch_trt,
         }
         if return_full_profile:
-            result['marker_profile'] = full_trt  # full 18-channel profile of the treated cell
+            result['marker_profile'] = full_ctrl  # full 18-channel profile of the control cell
+            # MAC must see the SOURCE molecular state so it learns control→target
+            # transport. full_trt is the reconstruction target (x_1 in flow matching).
         return result
 
     # Split files

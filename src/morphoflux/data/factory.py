@@ -12,13 +12,16 @@ import pandas as pd
 import yaml
 
 
-RAW_LINK_NAMES = {
-    "manifest": "manifest_crispr_hep_paired.parquet",
-    "extracted_images": "extracted_images",
-    "rna_h5ad": "RNA_crispr_hep_paired.h5ad",
-    "protein_h5ad": "protein_crispr_hep_paired.h5ad",
-    "decision_table": "v6_decision_table.csv",
-    "eval_panel": "eval_panel.json",
+# Logical asset key -> path relative to the raw data dir (data/raw).
+# The Perturb-Multi assets are self-contained in the repo under data/raw;
+# there is no external source project to resolve against.
+RAW_ASSETS = {
+    "manifest": "crispr/manifest.parquet",
+    "extracted_images": "crispr/images",
+    "rna_h5ad": "crispr/rna.h5ad",
+    "protein_h5ad": "crispr/protein.h5ad",
+    "decision_table": "metadata/decision_table.csv",
+    "eval_panel": "metadata/eval_panel.json",
     "paper": "Perturb-multimodal.md",
 }
 
@@ -60,7 +63,6 @@ def _resolve(project_root: Path, path: str | Path) -> Path:
 @dataclass(frozen=True)
 class FactoryPaths:
     project_root: Path
-    source_root: Path
     raw_dir: Path
     processed_dir: Path
     reports_dir: Path
@@ -75,15 +77,13 @@ class DataFactory:
         paths = config["paths"]
         self.paths = FactoryPaths(
             project_root=root,
-            source_root=_expand_path(paths["source_root"]).resolve(),
             raw_dir=_resolve(root, paths["raw_dir"]),
             processed_dir=_resolve(root, paths["processed_dir"]),
             reports_dir=_resolve(root, paths["reports_dir"]),
         )
 
-    def source_asset_path(self, key: str) -> Path:
-        rel = self.config["source_assets"][key]
-        return self.paths.source_root / rel
+    def raw_asset_path(self, key: str) -> Path:
+        return self.paths.raw_dir / RAW_ASSETS[key]
 
     def output_path(self, key: str) -> Path:
         return _resolve(self.paths.project_root, self.config["outputs"][key])
@@ -94,34 +94,21 @@ class DataFactory:
         self.paths.reports_dir.mkdir(parents=True, exist_ok=True)
         self.output_path("pairs_dir").mkdir(parents=True, exist_ok=True)
 
-    def ensure_raw_links(self) -> dict[str, dict[str, str]]:
+    def ensure_raw_assets(self) -> dict[str, dict[str, str]]:
         self.ensure_dirs()
         report: dict[str, dict[str, str]] = {}
-        for key, link_name in RAW_LINK_NAMES.items():
-            src = self.source_asset_path(key)
-            dst = self.paths.raw_dir / link_name
-            if not src.exists():
-                raise FileNotFoundError(f"Source asset does not exist: {src}")
-
-            status = "created"
-            if dst.exists() or dst.is_symlink():
-                if dst.is_symlink() and dst.resolve() == src.resolve():
-                    status = "exists"
-                else:
-                    raise FileExistsError(
-                        f"Refusing to overwrite existing raw asset path: {dst}"
-                    )
-            else:
-                os.symlink(src, dst, target_is_directory=src.is_dir())
-
-            report[key] = {"source": str(src), "link": str(dst), "status": status}
+        for key in RAW_ASSETS:
+            path = self.raw_asset_path(key)
+            if not path.exists():
+                raise FileNotFoundError(f"Raw asset does not exist: {path}")
+            report[key] = {"path": str(path), "status": "present"}
         return report
 
     def load_manifest(self) -> pd.DataFrame:
-        return pd.read_parquet(self.source_asset_path("manifest"))
+        return pd.read_parquet(self.raw_asset_path("manifest"))
 
     def load_decision_table(self) -> pd.DataFrame:
-        path = self.source_asset_path("decision_table")
+        path = self.raw_asset_path("decision_table")
         if not path.exists():
             return pd.DataFrame()
         return pd.read_csv(path)
@@ -166,7 +153,7 @@ class DataFactory:
         df["cell_id"] = df["cell_id"].astype(str)
         df["batch"] = df["batch"].astype(str)
         df["cluster_type"] = df["cluster_type"].astype(str)
-        df["image_relpath"] = "data/raw/extracted_images/" + df["image_member"].astype(str)
+        df["image_relpath"] = "data/raw/crispr/images/" + df["image_member"].astype(str)
         df["role"] = np.where(df["is_control"], "control_source", "perturbed_target")
         condition_col = data_cfg["condition_column"]
         df["condition_key"] = np.where(df["is_control"], "control", df[condition_col])
@@ -316,7 +303,7 @@ class DataFactory:
         raw: pd.DataFrame,
         manifest: pd.DataFrame,
         pair_audit: dict[str, Any],
-        link_report: dict[str, Any],
+        asset_report: dict[str, Any],
     ) -> dict[str, Any]:
         controls = manifest[manifest["is_control"]]
         targets = manifest[~manifest["is_control"]]
@@ -332,8 +319,7 @@ class DataFactory:
         audit = {
             "generated_at_utc": datetime.now(timezone.utc).isoformat(),
             "project_root": str(self.paths.project_root),
-            "source_root": str(self.paths.source_root),
-            "raw_links": link_report,
+            "raw_assets": asset_report,
             "raw_manifest_rows": int(len(raw)),
             "manifest_rows": int(len(manifest)),
             "counts": {
@@ -364,9 +350,9 @@ class DataFactory:
         }
         return _json_safe(audit)
 
-    def materialize(self, make_links: bool = True) -> dict[str, Any]:
+    def materialize(self, verify_assets: bool = True) -> dict[str, Any]:
         self.ensure_dirs()
-        link_report = self.ensure_raw_links() if make_links else {}
+        asset_report = self.ensure_raw_assets() if verify_assets else {}
 
         raw = self.load_manifest()
         manifest = self.build_manifest(raw)
@@ -384,7 +370,7 @@ class DataFactory:
             pairs.to_parquet(out, index=False)
             pair_paths[split] = str(out)
 
-        audit = self.build_audit(raw, manifest, pair_audit, link_report)
+        audit = self.build_audit(raw, manifest, pair_audit, asset_report)
         report_path = self.output_path("audit_report")
         audit["outputs"] = {
             "manifest": str(manifest_path),

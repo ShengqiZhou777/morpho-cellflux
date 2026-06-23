@@ -64,13 +64,13 @@ Primary 4-5 named baselines:
 | IMPA | Nature Communications 2025 image perturbation autoencoder | Main | GAN stability, data-format adapter |
 | MorphoDiff | diffusion perturbation-encoding cell morphology generation | Main or supplement | may not use control image |
 | StarGAN | classic multi-domain image translation | Supplement/main if results stable | older and less task-specific |
-| CellFlux shared-panel | original CellFlux-style recipe | Main | already available |
+| CellFlux-style shared-panel | CellFlux-engine recipe adapted to the shared panel; not an original upstream CellFlux benchmark | Main | already available |
 
 Optional if time permits:
 
 | Method | Why optional |
 |---|---|
-| CycleGAN | only practical for diet pairwise translation, not 76-gene CRISPR |
+| CycleGAN | only practical for diet pairwise translation, not many-class CRISPR |
 | MorphGen | strong recent model, but task/data assumptions differ and adapter may be heavy |
 | MorphDiff | transcriptome-guided; needs clean transcriptome condition, not always available for diet |
 | no-control FM | useful mechanistic ablation, but not a named external method |

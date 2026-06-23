@@ -16,10 +16,12 @@ seen under the real perturbation?
 ```
 
 For Diet, the perturbation condition is physiological state
-`adlib -> {fasted, hfd}`. For CRISPR, it is target-gene identity. In both cases
-the data are unpaired: a control image and a treated image are sampled from
-matched populations, not from the same cell over time. The defensible claim is
-distribution-level marker phenotype transport, not single-cell fate prediction.
+`adlib -> {fasted, hfd}`. For CRISPR, it is target-gene identity on the fixed
+paper-core knockout panel: the 40 main quantitative genes grouped into the
+original Perturb-Multi biological programs. In both cases the data are unpaired:
+a control image and a treated image are sampled from matched populations, not
+from the same cell over time. The defensible claim is distribution-level marker
+phenotype transport, not single-cell fate prediction.
 
 ## What The 18 Channels Mean
 
@@ -53,7 +55,7 @@ The active panels are:
 | benchmark | channels | markers | reason |
 |---|---|---|---|
 | Diet | `[9,5,8]` | Calreticulin / Perilipin / TOMM20 | strong physiological marker shifts, especially HFD lipid/ER/mitochondrial response |
-| CRISPR | `[0,14,5]` | Alb / Rab7 / Perilipin | broadest gene-level image responders after the rna_snr perturbation-validity filter |
+| CRISPR paper core | `[9,5,10]` | Calreticulin / Perilipin / pS6RP | original Perturb-Multi UPR / steatosis / mTOR programs |
 
 So the RGB images in figures are not natural-color microscopy. They are
 false-color composites of selected marker channels. This is why a generated
@@ -144,19 +146,20 @@ Diet 5K comparison at matched per-condition cap 2466 (`N=4932`):
 
 | method | FIDo | FIDc | KIDo | KIDc | MoA-Acc |
 |---|---:|---:|---:|---:|---:|
-| copy_control | **7.96** | **12.01** | **0.0039** | **0.0057** | 49.92 |
 | PhenDiff | 10.92 | 13.97 | 0.0066 | 0.0075 | 60.69 |
 | IMPA | 52.29 | 55.43 | 0.0407 | 0.0424 | **63.97** |
 | Morpho-CellFlux | 31.26 | 35.43 | 0.0267 | 0.0291 | 54.93 |
 
 This table prevents overclaiming:
 
-- Copy-control has the best FID/KID, so FID/KID reward same-batch image realism
-  and can rank the no-perturbation null highest.
 - PhenDiff is the best nontrivial method by FID/KID in this Diet table.
 - IMPA is best by MoA accuracy.
 - The proposed model is not currently the winner under CellFlux-style image
   metrics, but it shows a clear marker-distribution shift on the Diet panel.
+
+An internal no-transport sanity check can score strongly on FID/KID because it
+keeps same-batch control realism. We do not include that check as a paper
+baseline row.
 
 Therefore, the proposed method should not be sold as "best image generator" on
 the current table. The stronger and cleaner story is that Perturb-Multi exposes
@@ -170,17 +173,31 @@ effects are subtle relative to hepatocyte heterogeneity, so the result should be
 reported as distribution-level recovery, not as a single-cell before/after
 montage.
 
-Current best one-hot CRISPR run:
+Paper-line one-hot CRISPR run:
 
 ```text
-outputs/runs/crispr/main
-panel: Alb / Rab7 / Perilipin
+outputs/runs/crispr/paper_core
+panel: Calreticulin / Perilipin / pS6RP
 condition: target-gene one-hot
+gene set: 40 main quantitative Perturb-Multi paper-program genes
+reported labels: original Perturb-Multi programs
 ```
 
-The useful claim is partial gene-conditioned recovery on Alb/Rab7 and a weaker
-or negative Perilipin gap. Use CRISPR as the harder genetic benchmark and Diet
-as the strong physiological demonstration.
+The 40-gene CRISPR paper-core panel is:
+
+| program | genes |
+|---|---|
+| steatosis_lipid | Insig1, Pten, Eif2s1, Aars |
+| upr_er_stress | Sel1l, Sec61a1, Dnajb9, Atp2a2, Xbp1, Ern1 |
+| isr_translation | Nars, Eif2b4 |
+| mtor_ps6 | Mtor, Cdc37, Tsc1 |
+| lysosome_endomembrane | Npc1, Atp6v0c, Atp6ap1, Lamtor2, Dnm2, Arfrp1, Jtb, Zw10 |
+| zonation_wnt_hypoxia | Ctnnb1, Apc, Vhl, Lgr4, Prkar1a, Hs6st1, B4galt7, Zfp830 |
+| rna_processing_nuclear | Sf3b6, Sbno1, Polr1a, Kin, Polr2l, Gpn1, Rrn3, Taf1a, Ubtf |
+
+The useful claim is gene-conditioned recovery of original-paper marker programs:
+UPR/ER stress through Calreticulin, steatosis through Perilipin, and mTOR
+signaling through pS6RP.
 
 ## Metric Hierarchy
 
@@ -190,14 +207,14 @@ not let FID alone define biological success.
 | metric | role in this project |
 |---|---|
 | FID/KID | comparability and image-realism metrics; useful for detecting gross synthetic artifacts, but not a reliable biological success criterion here |
-| MoA | auxiliary condition-separability metric; meaningful only when the real-image classifier ceiling is well above chance |
+| MoA / Program-Acc | auxiliary condition-separability metric; for CRISPR paper core, report original-paper program labels rather than raw 76/77 gene identity as the main score |
 | marker distribution gap closure | primary biological-fidelity metric for Diet/Perturb-Multi marker transport |
 | direction recovery / sign agreement | primary CRISPR biology metric across genes and marker channels |
 | qualitative images | explanation and sanity check, not primary evidence |
 
 Why other CellFlux-style papers can use FID more centrally: in conventional
 cell-image benchmarks, the visual feature distribution and the biological
-phenotype often align better, and a copy-control null does not necessarily win.
+phenotype often align better, and a source-control reference does not necessarily win.
 Here, the RGB image is a false-color subset of marker channels. A method can be
 very realistic as a same-batch control image and still fail to move the relevant
 marker distribution.

@@ -1,9 +1,10 @@
 #!/usr/bin/env python
 """Compute the CellFlux image-quality metric suite (FIDo/FIDc/KIDo/KIDc) from imagefolders.
 
-Protocol: docs/EVAL_PROTOCOL.md. The same module is used for EVERY method
-(proposed + PhenDiff + IMPA + copy-control) so the comparison is apples-to-apples:
-identical InceptionV3 features, identical sample budget N, identical condition split.
+Protocol: docs/EVAL_PROTOCOL.md. The same module is used for every reported
+method so the comparison is apples-to-apples: identical InceptionV3 features,
+identical sample budget N, identical condition split
+sanity check can use this module too, but it is not a default paper-table row.
 
 Layout expected (shared across all methods):
     <real-dir>/<condition>/*.png      real perturbed images (reference)

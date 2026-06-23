@@ -235,4 +235,27 @@ def get_args_parser():
         type=float,
         default=0.5,
     )
+    parser.add_argument(
+        "--foreground_loss",
+        action="store_true",
+        help="Use foreground-weighted flow-matching MSE for sparse marker crops.",
+    )
+    parser.add_argument(
+        "--foreground_threshold",
+        type=float,
+        default=0.05,
+        help="Raw [0,1] marker-intensity threshold for dynamic foreground masks.",
+    )
+    parser.add_argument(
+        "--foreground_weight",
+        type=float,
+        default=5.0,
+        help="Loss weight for foreground pixels when --foreground_loss is enabled.",
+    )
+    parser.add_argument(
+        "--background_weight",
+        type=float,
+        default=0.1,
+        help="Loss weight for background pixels when --foreground_loss is enabled.",
+    )
     return parser

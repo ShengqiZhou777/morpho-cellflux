@@ -8,8 +8,9 @@ set -euo pipefail
 PROJECT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$PROJECT"
 
-BENCHMARKS="${BENCHMARKS:-diet crispr}"
+BENCHMARKS="${BENCHMARKS:-diet crispr_paper}"
 INCLUDE_STARGAN="${INCLUDE_STARGAN:-1}"
+INCLUDE_COPY_CONTROL="${INCLUDE_COPY_CONTROL:-0}"
 
 summary_exists() {
   [[ -f "$PROJECT/$1/aggregate_eval_summary.json" ]]
@@ -18,7 +19,7 @@ summary_exists() {
 benchmark_config() {
   case "$1" in
     diet) echo "configs/diet_id.yaml" ;;
-    crispr) echo "configs/perturbmulti_train_id.yaml" ;;
+    crispr_paper) echo "configs/crispr_paper_core.yaml" ;;
     *)
       echo "Unknown benchmark: $1" >&2
       return 2
@@ -47,24 +48,18 @@ ensure_export() {
   echo "[$(date -Is)] DONE export $benchmark"
 }
 
-run_copy_control_for() {
   local benchmark="$1"
   local config
   config="$(benchmark_config "$benchmark")"
-  local out="outputs/baselines/copy_control/$benchmark"
 
   if summary_exists "$out"; then
-    echo "[$(date -Is)] SKIP copy_control $benchmark: summary exists"
     return
   fi
 
-  echo "[$(date -Is)] START copy_control $benchmark"
-  python baselines/copy_control.py \
     --config "$config" \
     --output "$out" \
     --split test
   python scripts/aggregate_eval.py "$out" 5 0
-  echo "[$(date -Is)] DONE copy_control $benchmark"
 }
 
 run_phendiff_for() {
@@ -127,11 +122,12 @@ run_stargan_for() {
 echo "[$(date -Is)] START paper baseline queue"
 echo "project=$PROJECT"
 echo "benchmarks=$BENCHMARKS"
-echo "export_workers=${EXPORT_WORKERS:-8} phendiff_epochs=${PHENDIFF_EPOCHS:-8} impa_epochs=${IMPA_EPOCHS:-8} stargan_iters=${STARGAN_NUM_ITERS:-50000}"
 
 for benchmark in $BENCHMARKS; do
   ensure_export "$benchmark"
-  run_copy_control_for "$benchmark"
+  if [[ "$INCLUDE_COPY_CONTROL" == "1" ]]; then
+  else
+  fi
   run_phendiff_for "$benchmark"
   run_impa_for "$benchmark"
   run_stargan_for "$benchmark"

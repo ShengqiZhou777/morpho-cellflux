@@ -41,11 +41,11 @@ evaluated on the same local data:
 
 ```text
 configs/diet_id.yaml
-configs/perturbmulti_train_id.yaml
+configs/crispr_paper_core.yaml
 data/processed/diet/index_diet.csv
-data/processed/perturbmulti/index_train.csv
-data/raw/diet_extracted_images/
-data/raw/extracted_images/
+data/processed/crispr/index_paper_programs.csv
+data/raw/diet/images/
+data/raw/crispr/images/
 ```
 
 ## GPU launch policy
@@ -58,8 +58,9 @@ CUDA_VISIBLE_DEVICES=0,1 <method-native-launcher>
 
 Do not run PhenDiff and IMPA simultaneously until memory use is measured.
 
-Copy-control is CPU only:
+Copy-control is CPU only and internal-only. It is not part of the default paper
+baseline queue:
 
 ```bash
-bash baselines/run_copy_control.sh
+BENCHMARKS="diet" bash baselines/run_phendiff.sh
 ```
