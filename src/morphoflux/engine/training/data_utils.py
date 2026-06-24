@@ -10,6 +10,12 @@ from pathlib import Path
 # Public configs pin their own panels in YAML.
 PERTURBMULTI_CHANNELS = [5, 9, 10]
 
+# Precomputed per-condition population-mean 18-channel profiles.
+# Used by PhenoFlux MAC/CCM to condition on the TARGET condition's
+# canonical molecular state instead of the individual control cell's
+# profile (which is confounded with per-cell variation in pseudo-paired data).
+_COND_MEAN_PROFILES = None
+
 
 def _load_perturbmulti(image_path, sample_key, channels=None, return_full_profile=False):
     """Load a Perturb-Multi cell crop: npz['x'] (18,H,W) float[0,1] -> selected
@@ -28,6 +34,46 @@ def _load_perturbmulti(image_path, sample_key, channels=None, return_full_profil
         full_tensor = torch.from_numpy(np.ascontiguousarray(full)).float()
         return result, full_tensor
     return result
+
+
+def _get_cond_mean_profile(condition_id: int, device=None):
+    """Return the population-mean 18-channel profile for a target condition.
+
+    Broadcasts the per-channel scalar means to a (18, 128, 128) spatial tensor
+    compatible with the MAC MarkerProfileEncoder Conv2d input.  The constant
+    feature maps let the Conv2d extract per-channel features without spatial
+    variation — the model learns to condition on the canonical molecular state
+    of the TARGET condition rather than the individual (noisy, pseudo-paired)
+    control cell.
+
+    Profiles are loaded lazily from ``data/processed/<task>/cond_mean_profiles.npz``.
+    """
+    global _COND_MEAN_PROFILES
+    if _COND_MEAN_PROFILES is None:
+        # Try diet first; could be extended with a config-driven path later.
+        import os
+        candidates = [
+            "data/processed/diet/cond_mean_profiles.npz",
+            os.path.join(os.path.dirname(__file__), "..", "..", "..", "..", "data", "processed", "diet", "cond_mean_profiles.npz"),
+        ]
+        path = None
+        for c in candidates:
+            if os.path.exists(c):
+                path = c
+                break
+        if path is None:
+            raise FileNotFoundError(
+                "cond_mean_profiles.npz not found. Run the profile computation step first."
+            )
+        data = np.load(path)
+        _COND_MEAN_PROFILES = {int(k): torch.from_numpy(data[k].astype(np.float32)) for k in data.files}
+
+    mean_18 = _COND_MEAN_PROFILES[int(condition_id)]  # (18,)
+    # Broadcast to spatial: (18, 128, 128)
+    spatial = mean_18[:, None, None].expand(18, 128, 128).clone()
+    if device is not None:
+        spatial = spatial.to(device)
+    return spatial
 
 
 class CustomTransform:
@@ -147,9 +193,14 @@ def read_files_pert(file_names, mols, mol2id, y2id, dose, y, transform, image_pa
             'batch': batch_trt,
         }
         if return_full_profile:
-            result['marker_profile'] = full_ctrl  # full 18-channel profile of the control cell
-            # MAC must see the SOURCE molecular state so it learns control→target
-            # transport. full_trt is the reconstruction target (x_1 in flow matching).
+            result['marker_profile'] = _get_cond_mean_profile(
+                y2id[y["trt"][idx_trt]], device=img_ctrl.device
+            )
+            # PhenoFlux MAC/CCM: condition on TARGET condition's population-mean
+            # 18-channel profile instead of the individual control cell's profile.
+            # Pseudo-paired data (same-batch, different cells) means per-cell
+            # control profiles are confounded with individual variation; population
+            # means capture the canonical molecular state of each condition.
         return result
 
     # Split files
