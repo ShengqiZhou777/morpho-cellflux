@@ -76,10 +76,11 @@ CONFIG=diet_id DATASET=diet_id bash scripts/train.sh
 
 ### Primary metric: gap_closed
 ```bash
-# 1. Generate images from checkpoint
+# 1. Generate images from checkpoint (--use_ema REQUIRED if trained with --use_ema!)
 torchrun --standalone --nproc_per_node=2 -m morphoflux.engine.train \
   --dataset phenoflux_diet --config phenoflux_diet --device cuda \
   --eval_only --resume <checkpoint.pth> --use_initial 1 --cfg_scale X.X \
+  --use_ema \
   --fid_samples 1000 --compute_fid --save_fid_samples \
   --output_dir <eval_dir>
 

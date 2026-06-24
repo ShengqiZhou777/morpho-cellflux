@@ -152,7 +152,7 @@ class MACAttentionBlock(nn.Module):
         # Scaled dot-product attention
         scale = self.head_dim ** -0.5
         attn = torch.matmul(q, k.transpose(-2, -1)) * scale      # (B, heads, HW, N_ctx)
-        attn = torch.softmax(attn, dim=-1)
+        attn = torch.softmax(attn.float(), dim=-1).type(attn.dtype)
         out = torch.matmul(attn, v)                               # (B, heads, HW, head_dim)
 
         # Merge heads -> project -> residual

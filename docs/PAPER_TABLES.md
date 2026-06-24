@@ -9,11 +9,11 @@ PhenoFlux additionally consumes the full 18-channel marker profile via MAC/CCM.
 
 | Method | Type | Venue | FIDo↓ | FIDc↓ | KIDo↓ | KIDc↓ | MoA↑ | gap_closed↑ |
 |---|---|---|---|---|---|---|---|---|
-| PhenDiff | Diffusion I2I translation | MICCAI 2024 | — | — | — | — | — | — |
-| IMPA | Autoencoder-GAN | Nat.Comms 2025 | — | — | — | — | — | — |
-| StarGAN | GAN I2I translation | CVPR 2018 | — | — | — | — | — | — |
+| PhenDiff | Diffusion I2I translation | MICCAI 2024 | 10.92 | 13.97 | 0.0066 | 0.0075 | 60.69 | — |
+| IMPA | Autoencoder-GAN | Nat.Comms 2025 | 52.29 | 55.43 | 0.0407 | 0.0424 | 48.5 | — |
+| StarGAN | GAN I2I translation | CVPR 2018 | — | — | — | — | 46.3 | — |
 | MorphoDiff | Diffusion generation | MICCAI 2024 | — | — | — | — | — | — |
-| CellFlux | Flow Matching | ICML 2025 | — | — | — | — | — | — |
+| CellFlux | Flow Matching | ICML 2025 | — | — | — | — | **76.66** | — |
 | **PhenoFlux** | FM + MAC/CCM | ours | — | — | — | — | — | — |
 
 **Notes:**
@@ -23,6 +23,11 @@ PhenoFlux additionally consumes the full 18-channel marker profile via MAC/CCM.
 - gap_closed: pooled Wasserstein distance over 3 marker channels — the primary biological metric.
 - Baselines only receive one-hot condition [3]; PhenoFlux receives one-hot [3] + 18-ch marker profile via MAC/CCM.
 - **This discrepancy is addressed by the information-control row in Table 2.**
+- PhenDiff FID/KID/MoA: from 5K matched-N protocol (N=4932); MoA=60.69 on 4932 samples.
+- IMPA FID/KID: from 5K matched-N protocol; MoA=48.5 on 5K protocol.
+- StarGAN MoA=46.3: on 5K matched-N protocol; FID/KID pending.
+- CellFlux MoA=76.66: **5K confirmed** (ep11, init=1, CFG=3.0, 2592 fasted + 2408 hfd, FID=25.51). Training CFG=0.2, eval CFG swept 0.5-3.0; CFG=3.0 is the optimal eval setting.
+- StarGAN/IMPA FID/KID pending final 5K re-eval with matched protocol.
 
 ---
 
@@ -121,7 +126,7 @@ Row 5:  CONFIG=phenoflux_diet          (use_mac=true,  use_ccm=true)
 | T8 | IMPA 5K eval + gap_closed | diet_id | ⏳ |
 | T9 | StarGAN 5K eval + gap_closed | diet_id | ⏳ (checkpoint exists) |
 | T10 | MorphoDiff adapter + train + eval | diet_id | ⏳ (adapter needed) |
-| T11 | CellFlux v4 eval (baseline row) | diet_id | ⏳ (training in progress) |
+| T11 | CellFlux v4 eval (baseline row) | diet_id | ✅ **5K done**: MoA=76.66%, FID=25.51 (ep11, init=1, CFG=3.0) |
 
 **Parallel schedule after T1 completes:**
 ```

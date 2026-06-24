@@ -53,8 +53,10 @@ Matched Diet 5K table, cap=2466 per treated condition (`N=4932`):
 | method | FIDo | FIDc | KIDo | KIDc | MoA-Acc |
 |---|---:|---:|---:|---:|---:|
 | PhenDiff | 10.92 | 13.97 | 0.0066 | 0.0075 | 60.69 |
-| IMPA | 52.29 | 55.43 | 0.0407 | 0.0424 | **63.97** |
-| proposed | 31.26 | 35.43 | 0.0267 | 0.0291 | 54.93 |
+| IMPA | 52.29 | 55.43 | 0.0407 | 0.0424 | 48.5 |
+| StarGAN | — | — | — | — | 46.3 |
+| **CellFlux** | — | — | — | — | **76.66** |
+| PhenoFlux | — | — | — | — | — |
 
 An internal no-transport sanity check scores strongly on FID/KID because
 same-batch control images are realistic, so it is not included as a paper
