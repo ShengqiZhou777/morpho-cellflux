@@ -196,11 +196,12 @@ MODEL_CONFIGS = {
         "with_fourier_features": False,
         "condition_dim": 3,
     },
-    "diet_id_18ch": {
-        # 18-channel naive baseline: same UNet as diet_id, but condition_dim = 3 (one-hot)
-        # + 18 (marker profile concat).  The extra 18 channels are concatenated to the
-        # condition vector in the train/eval loop — no MAC, no cross-attention, no CCM.
-        # This proves that MAC's structural inductive bias matters, not just the extra data.
+    "diet_id_msa": {
+        # Marker Self-Attention: replaces naive 18ch concat with learned per-channel
+        # descriptors + self-attention over markers + condition-gated pooling.
+        # Same UNet body as diet_id_18ch, but the 18ch profile is processed by MSA
+        # instead of naive mean-pool + concat.
+        # condition_dim = 3 (one-hot) + 64 (MSA output) = 67
         "in_channels": 3,
         "model_channels": 128,
         "out_channels": 3,
@@ -219,14 +220,15 @@ MODEL_CONFIGS = {
         "resblock_updown": False,
         "use_new_attention_order": True,
         "with_fourier_features": False,
-        "condition_dim": 21,   # 3 (diet one-hot) + 18 (marker profile concat)
+        "condition_dim": 67,    # 3 (diet one-hot) + 64 (MSA output)
+        "use_msa": True,        # Enable Marker Self-Attention module
+        "msa_output_dim": 64,   # MSA output dimension
     },
-    "phenoflux_diet": {
-        # PhenoFlux: marker-aware flow matching variant of diet_id.
-        # Same UNet body, but adds a MAC (Marker-Aware Conditioning) module:
-        # MarkerProfileEncoder (18-ch → tokens) + MACAttention at the bottleneck,
-        # enabling the model to condition on the full 18-channel MERFISH molecular
-        # profile rather than just a global one-hot condition vector.
+    "diet_id_msa_pcd": {
+        # MSA + PCD: Marker Self-Attention + Per-Channel Condition Decoder.
+        # MSA learns marker co-regulation.  PCD decodes MSA output into
+        # per-channel (scale, bias) modulation — one pair per output channel.
+        # Same UNet body, same condition_dim=67.
         "in_channels": 3,
         "model_channels": 128,
         "out_channels": 3,
@@ -245,92 +247,10 @@ MODEL_CONFIGS = {
         "resblock_updown": False,
         "use_new_attention_order": True,
         "with_fourier_features": False,
-        "condition_dim": 3,
-        # --- PhenoFlux modules ---
-        "use_mac": True,
-        "use_ccm": True,
-        "marker_profile_dim": 18,
-        "mac_resolutions": [8],
-    },
-    "phenoflux_diet_no_ccm": {
-        # Ablation: MAC cross-attention only, no CCM per-channel FiLM.
-        "in_channels": 3,
-        "model_channels": 128,
-        "out_channels": 3,
-        "num_res_blocks": 4,
-        "attention_resolutions": [4],
-        "dropout": 0.3,
-        "channel_mult": [2, 2, 2],
-        "conv_resample": False,
-        "dims": 2,
-        "num_classes": None,
-        "use_checkpoint": False,
-        "num_heads": 1,
-        "num_head_channels": -1,
-        "num_heads_upsample": -1,
-        "use_scale_shift_norm": True,
-        "resblock_updown": False,
-        "use_new_attention_order": True,
-        "with_fourier_features": False,
-        "condition_dim": 3,
-        "use_mac": True,
-        "use_ccm": False,
-        "marker_profile_dim": 18,
-        "mac_resolutions": [8],
-    },
-    "phenoflux_diet_no_mac": {
-        # Ablation: CCM per-channel FiLM only, no MAC cross-attention.
-        "in_channels": 3,
-        "model_channels": 128,
-        "out_channels": 3,
-        "num_res_blocks": 4,
-        "attention_resolutions": [4],
-        "dropout": 0.3,
-        "channel_mult": [2, 2, 2],
-        "conv_resample": False,
-        "dims": 2,
-        "num_classes": None,
-        "use_checkpoint": False,
-        "num_heads": 1,
-        "num_head_channels": -1,
-        "num_heads_upsample": -1,
-        "use_scale_shift_norm": True,
-        "resblock_updown": False,
-        "use_new_attention_order": True,
-        "with_fourier_features": False,
-        "condition_dim": 3,
-        "use_mac": False,
-        "use_ccm": True,
-        "marker_profile_dim": 18,
-        "mac_resolutions": [8],
-    },
-    "phenoflux_crispr": {
-        # PhenoFlux for CRISPR: MAC + CCM on perturbmulti_id backbone.
-        # condition_dim=204 (one-hot gene identity), marker_profile_dim=18.
-        "in_channels": 3,
-        "model_channels": 128,
-        "out_channels": 3,
-        "num_res_blocks": 4,
-        "attention_resolutions": [4],
-        "dropout": 0.3,
-        "channel_mult": [2, 2, 2],
-        "conv_resample": False,
-        "dims": 2,
-        "num_classes": None,
-        "use_checkpoint": False,
-        "num_heads": 1,
-        "num_head_channels": -1,
-        "num_heads_upsample": -1,
-        "use_scale_shift_norm": True,
-        "resblock_updown": False,
-        "use_new_attention_order": True,
-        "with_fourier_features": False,
-        "condition_dim": 204,
-        # --- PhenoFlux modules ---
-        "use_mac": True,
-        "use_ccm": True,
-        "marker_profile_dim": 18,
-        "mac_resolutions": [8],
+        "condition_dim": 67,
+        "use_msa": True,
+        "msa_output_dim": 64,
+        "use_pcd": True,         # Enable PCD per-channel modulation
     },
     "cifar10_discrete": {
         "in_channels": 3,
@@ -372,7 +292,20 @@ def instantiate_model(
             **config,
         )
     else:
-        model = UNetModel(**MODEL_CONFIGS[architechture])
+        config = MODEL_CONFIGS[architechture]
+        # Filter out non-UNet keys (MSA/MAC/CCM module configs)
+        unet_config = {k: v for k, v in config.items()
+                       if k not in ('use_msa', 'msa_output_dim', 'use_srm', 'use_pcd',
+                                    'use_mac', 'use_ccm', 'marker_profile_dim',
+                                    'mac_resolutions',
+                                    'ccm_hidden_dim', 'ccm_n_layers')}
+        model = UNetModel(**unet_config)
+        # Store module flags as model attributes for train/eval loop detection
+        for key in ('use_msa', 'msa_output_dim', 'use_srm', 'use_pcd',
+                     'use_mac', 'use_ccm', 'marker_profile_dim',
+                     'mac_resolutions'):
+            if key in config:
+                setattr(model, key, config[key])
     if use_ema:
         return EMA(model=model)
     else:

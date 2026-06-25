@@ -15,6 +15,8 @@ import torch
 from flow_matching.path import CondOTProbPath, MixtureDiscreteProbPath
 from flow_matching.path.scheduler import PolynomialConvexScheduler
 from morphoflux.engine.models.ema import EMA
+from morphoflux.engine.models.msa import MarkerSelfAttention
+from morphoflux.engine.models.pcd import PerChannelDecoder
 from torch.nn.parallel import DistributedDataParallel
 from torchmetrics.aggregation import MeanMetric
 from morphoflux.engine.training.grad_scaler import NativeScalerWithGradNormCount
@@ -79,9 +81,21 @@ def my_train_one_epoch(
     model.train(True)
     _model = model.module if hasattr(model, 'module') else model
     _model = getattr(_model, 'model', _model)  # unwrap EMA if present
-    _use_mac = getattr(_model, 'use_mac', False)
-    _use_ccm = getattr(_model, 'use_ccm', False)
-    _use_marker_module = _use_mac or _use_ccm
+    _use_msa = getattr(_model, 'use_msa', False)
+    _use_pcd = getattr(_model, 'use_pcd', False)
+    if _use_msa:
+        _msa = MarkerSelfAttention(
+            n_markers=18,
+            d_model=64,
+            output_dim=getattr(_model, 'msa_output_dim', 64),
+            condition_dim=3,
+        ).to(device)
+    if _use_pcd:
+        _pcd = PerChannelDecoder(
+            msa_dim=getattr(_model, 'msa_output_dim', 64),
+            cond_dim=3,
+            out_channels=3,
+        ).to(device)
     batch_loss = MeanMetric().to(device, non_blocking=True)
     epoch_loss = MeanMetric().to(device, non_blocking=True)
 
@@ -117,11 +131,20 @@ def my_train_one_epoch(
         # weakening classifier-free guidance.
         if "marker_profile" in batch and "concat_conditioning" in conditioning:
             mp = batch["marker_profile"].to(device)
-            if _use_marker_module:
-                conditioning["marker_profile"] = mp
-            else:
+            if _use_msa:
+                # MSA: learn marker co-regulation → context vector
+                msa_out = _msa(mp, conditioning["concat_conditioning"])
                 conditioning["concat_conditioning"] = torch.cat(
-                    [conditioning["concat_conditioning"], mp], dim=1
+                    [conditioning["concat_conditioning"], msa_out], dim=1
+                )
+                if _use_pcd:
+                    conditioning["_msa_out"] = msa_out
+                    conditioning["_aux_cond"] = conditioning["concat_conditioning"][:, :3]  # one-hot part
+            else:
+                # Naive concat: pool marker profile from [B,18,H,W] to [B,18]
+                mp_pooled = mp.mean(dim=[2, 3])
+                conditioning["concat_conditioning"] = torch.cat(
+                    [conditioning["concat_conditioning"], mp_pooled], dim=1
                 )
         
         if args.discrete_flow_matching:
@@ -158,6 +181,10 @@ def my_train_one_epoch(
 
             with torch.amp.autocast("cuda"):
                 pred = model(x_t, t, extra=conditioning)
+                # PCD: apply per-channel condition-specific modulation
+                if _use_pcd and "_msa_out" in conditioning:
+                    scale, bias = _pcd(conditioning["_msa_out"], conditioning["_aux_cond"])
+                    pred = pred * (1.0 + scale) + bias
                 if getattr(args, "foreground_loss", False):
                     loss = foreground_weighted_mse(
                         pred,

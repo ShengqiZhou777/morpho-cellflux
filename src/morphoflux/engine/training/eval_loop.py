@@ -17,6 +17,7 @@ import numpy as np
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 from morphoflux.engine.training.dataloader import CellDataLoader
+from morphoflux.engine.models.msa import MarkerSelfAttention
 import torch
 from flow_matching.path import MixtureDiscreteProbPath
 from flow_matching.path.scheduler import PolynomialConvexScheduler
@@ -129,9 +130,16 @@ def eval_model(
     gc.collect()
     _model = model.module if hasattr(model, 'module') else model
     _model = getattr(_model, 'model', _model)  # unwrap EMA if present
-    _use_mac = getattr(_model, 'use_mac', False)
-    _use_ccm = getattr(_model, 'use_ccm', False)
-    _use_marker_module = _use_mac or _use_ccm
+    _use_msa = getattr(_model, 'use_msa', False)
+    _use_pcd = getattr(_model, 'use_pcd', False)
+    if _use_msa:
+        _msa = MarkerSelfAttention(
+            n_markers=18, d_model=64,
+            output_dim=getattr(_model, 'msa_output_dim', 64),
+            condition_dim=3,
+        ).to(device)
+        _msa.eval()
+
     cfg_scaled_model = CFGScaledModel(model=model)
     cfg_scaled_model.train(False)
 
@@ -176,11 +184,20 @@ def eval_model(
         eval_extra = {"concat_conditioning": z_emb_trg}
         if "marker_profile" in batch:
             mp = batch["marker_profile"].to(device)
-            if _use_marker_module:
-                eval_extra["marker_profile"] = mp
-            else:
+            if _use_msa:
+                msa_out = _msa(mp, eval_extra["concat_conditioning"])
                 eval_extra["concat_conditioning"] = torch.cat(
-                    [eval_extra["concat_conditioning"], mp], dim=1
+                    [eval_extra["concat_conditioning"], msa_out], dim=1
+                )
+                if _use_pcd:
+                    eval_extra["_msa_out"] = msa_out
+                    eval_extra["_aux_cond"] = eval_extra["concat_conditioning"][:, :3]
+            else:
+                # Naive concat: pool marker profile from [B,18,H,W] to [B,18]
+                # so it can be concatenated with the 2D condition embedding.
+                mp_pooled = mp.mean(dim=[2, 3])
+                eval_extra["concat_conditioning"] = torch.cat(
+                    [eval_extra["concat_conditioning"], mp_pooled], dim=1
                 )
 
         if num_synthetic < fid_samples:
