@@ -1,4 +1,4 @@
-# Reproducing Morpho-CellFlux Experiments
+# Reproducing PhenoFlux Experiments
 
 This document describes the artifact contract for reproducing the experiments
 from a fresh clone. The repository intentionally does not include raw imaging
@@ -8,173 +8,167 @@ data, checkpoints, generated samples, or large baseline exports.
 
 ```bash
 conda env create -f environment.yml
-conda activate morpho-cellflux
+conda activate pmf
 pip install -e .
 ```
 
-If your system requires a different CUDA build, install the correct PyTorch /
-torchvision packages first, then run `pip install -e .`.
+If your system requires a different CUDA build, install PyTorch/torchvision first,
+then run `pip install -e .`.
 
 ## 2. External Data
 
-Raw data are not committed to this repository. Use the public Perturb-Multi
-release and keep the downloaded assets outside git:
+Raw data are not committed. Download from the public Perturb-Multi release:
 
 - Perturb-Multi paper: https://doi.org/10.1016/j.cell.2025.05.022
-- Cell images: https://huggingface.co/datasets/xingjiepan/PerturbMulti/tree/main
+- Cell images: https://huggingface.co/datasets/xingjiepan/PerturbMulti
 
-This pipeline does not require the GEO raw sequencing release. It uses the
-paired image/protein/RNA assets from Perturb-Multi; the RNA h5ad is treated as a
-MERFISH readout for filtering/diagnostics and optional ablation, not as the main
-generative condition.
+Place under `data/raw/`:
 
-Place the downloaded assets under `data/raw/` using the self-contained,
-per-dataset layout below. The configs and build scripts read these paths
-directly -- no external source tree or `MORPHO_PHENOTYPING_ROOT` variable is
-needed:
-
-```text
+```
 data/raw/
   crispr/    images/  manifest.parquet  rna.h5ad  protein.h5ad
   diet/      images/  manifest.parquet  rna.h5ad  protein.h5ad
-  metadata/  eval_panel.json  decision_table.csv
-  Perturb-multimodal.md
 ```
-
-The CRISPR factory resolves these via the `RAW_ASSETS` map in
-`src/morphoflux/data/factory.py` (paired manifest, image npz directory,
-RNA/protein h5ad, metadata decision table, evaluation panel, and the
-Perturb-Multi paper markdown). The diet build/audit scripts read
-`data/raw/diet/` directly.
 
 ## 3. Build Derived Tables
 
-CRISPR:
-
 ```bash
-python scripts/materialize_data.py --config configs/crispr_hep.yaml
+# CRISPR: 40 genes in 7 functional programs + one-hot embedding
 python scripts/build_crispr_paper_data.py
-```
 
-Diet:
-
-```bash
-python scripts/audit_diet_assets.py
+# Diet: 3 conditions, 18ch population-mean profiles + embedding
 python scripts/build_diet_data.py
+
+# Diet subsets for fast validation
+python scripts/build_diet_subset.py
 ```
 
-Generated files under `data/raw/` and `data/processed/` are gitignored. The
-runtime configs point to these generated paths.
+Each config YAML points to three runtime artifacts:
 
-## 4. Train Proposed Models
+```
+image_path        raw npz crop directory
+data_index_path   engine index CSV
+embedding_path    condition embedding CSV
+```
 
-Diet headline run:
+## 4. Training
+
+All training uses `torchrun -m phenoflux.train --dataset phenoflux --config <name>`.
+
+### Diet experiments (4 configs)
 
 ```bash
-OUT=outputs/runs/diet/main \
-CONFIG=diet_id DATASET=diet_id \
-EPOCHS=12 EVAL_FREQ=2 FID_SAMPLES=5120 \
-NPROC=2 BATCH=16 USE_INITIAL=1 CFG=0.2 \
-bash scripts/train.sh
+# Baseline
+torchrun --standalone --nproc_per_node=2 -m phenoflux.train \
+  --dataset phenoflux --config phenoflux_diet --device cuda \
+  --batch_size 32 --epochs 20 --use_initial 1 --cfg_scale 0.2 \
+  --use_ema --skewed_timesteps --class_drop_prob 0.2 \
+  --eval_frequency 5 --fid_samples 5120 --compute_fid --save_fid_samples \
+  --output_dir outputs/runs/diet/baseline
+
+# + 18ch naive concat (info control)
+torchrun ... --config phenoflux_diet_18ch --output_dir outputs/runs/diet/18ch
+
+# + MSA
+torchrun ... --config phenoflux_diet_msa --output_dir outputs/runs/diet/msa
+
+# + MSA + PCD
+torchrun ... --config phenoflux_diet_msa_pcd --output_dir outputs/runs/diet/msa_pcd
 ```
 
-CRISPR paper-core one-hot run:
+Omit `--data_index` for full dataset. For fast validation:
 
 ```bash
-OUT=outputs/runs/crispr/paper_core \
-CONFIG=crispr_paper_core DATASET=perturbmulti_id \
-EPOCHS=20 EVAL_FREQ=5 FID_SAMPLES=5120 \
-NPROC=2 BATCH=16 USE_INITIAL=1 CFG=0.2 \
-bash scripts/train.sh
+--data_index data/processed/diet/index_diet_2k.csv    # 2k cells, very fast
+--data_index data/processed/diet/index_diet_5k.csv    # 18k cells, ablations
 ```
 
-## 5. Evaluate Proposed Models
-
-Marker gap/direction summaries:
+### CRISPR experiments (4 configs)
 
 ```bash
-python scripts/aggregate_eval.py outputs/runs/diet/main 5 9
-python scripts/aggregate_eval.py outputs/runs/crispr/paper_core 5 19
+# Baseline
+torchrun --standalone --nproc_per_node=2 -m phenoflux.train \
+  --dataset phenoflux --config phenoflux_crispr --device cuda \
+  --batch_size 32 --epochs 40 --use_initial 1 --cfg_scale 0.2 \
+  --use_ema --skewed_timesteps --class_drop_prob 0.2 \
+  --eval_frequency 10 --fid_samples 5120 --compute_fid --save_fid_samples \
+  --data_index data/processed/crispr/index_paper_40.csv \
+  --output_dir outputs/runs/crispr/baseline
+
+# + MSA + PCD
+torchrun ... --config phenoflux_crispr_msa_pcd --output_dir outputs/runs/crispr/msa_pcd
+
+# + PCGE
+torchrun ... --config phenoflux_crispr_pcge --output_dir outputs/runs/crispr/pcge
+
+# + PCGE + MSA + PCD
+torchrun ... --config phenoflux_crispr_pcge_msa_pcd --output_dir outputs/runs/crispr/pcge_msa_pcd
 ```
 
-CRISPR paper-core program classifier:
+### Convenience launcher
 
 ```bash
-python src/morphoflux/engine/moa/train_moa.py \
-  --config_path configs/crispr_paper_core.yaml \
-  --mode train \
-  --ckpt_path outputs/baselines/moa/crispr_paper/program_classifier.pth \
-  --label-map-csv data/processed/crispr/program_labels_paper.csv
+CONFIG=phenoflux_diet_msa_pcd OUT=outputs/runs/diet/msa_pcd \
+  EPOCHS=20 EVAL_FREQ=5 FID_SAMPLES=5120 NPROC=2 BATCH=32 \
+  bash scripts/train.sh
 ```
 
-Diet marker distribution figure:
+### Quick validation
 
 ```bash
-python scripts/diet_marker_distribution_figure.py \
-  --run-dir outputs/runs/diet/fid5k \
-  --epoch 12 \
-  --out-dir outputs/figures/diet \
-  --prefix diet_fid5k
+bash scripts/quick_validate.sh phenoflux_diet phenoflux
 ```
 
-The Diet 5K marker-distribution script writes both figures and machine-readable
-CSV/JSON summaries.
+## 5. Evaluation
 
-## 6. Run Baselines
-
-Export shared imagefolder/npy data:
+### Image quality (FIDo/c, KIDo/c)
 
 ```bash
-bash baselines/export_all_baseline_data.sh
+python phenoflux/eval/fid.py \
+  --real-dir <real_imgs> --gen-dir <gen_imgs> --per-condition-cap 500
 ```
 
-Run the baseline queue:
+### Biological metrics (gap_closed, dir-corr, sign-agreement)
+
+```bash
+python phenoflux/eval/aggregate.py <eval_dir> 5 <epoch>
+```
+
+### MoA classifier accuracy
+
+```bash
+python phenoflux/eval/moa.py \
+  --config_path configs/phenoflux_crispr.yaml --mode eval \
+  --img_root_path <eval_dir>/fid_samples/epoch-<N> \
+  --ckpt_path outputs/baselines/moa/crispr/condition_classifier.pth \
+  --out_json <eval_dir>/moa.json
+```
+
+### Baseline comparison table
 
 ```bash
 bash baselines/run_paper_baselines.sh
-```
-
-Set `CONDA_ENV`, `CONDA_BIN`, or `CONDA_SH` before launching baseline scripts if
-your cluster does not expose conda on `PATH`.
-
-Collect method tables:
-
-```bash
 python baselines/collect_paper_metrics.py
 ```
 
-See `baselines/README.md` for per-method output contracts and GPU policy.
+## 6. Checkpoint Format
 
-## 7. Current Known Caveats
-
-- Diet is confounded with imaging batch; `BATCH` is collapsed so adlib controls
-  can pair with fasted/HFD cells.
-- The data are unpaired; do not interpret one generated cell as the true future
-  of one control cell.
-- FID/KID are reported for comparability but are not the primary biological
-  metric for Perturb-Multi. A source-control sanity check can score strongly on
-  FID/KID because same-batch controls are realistic.
-- A pre-fix 2-GPU Diet 5K eval produced 5120 PNGs but only 2560 paired
-  treated->control mappings. Future evals include a DDP mapping gather fix.
-
-## 8. Files Intended For Git
-
-Tracked:
-
-```text
-source code
-configs
-small docs
-small paper-table TSVs under data/reports/
+```python
+{
+    "epoch": epoch,
+    "model": model.state_dict(),
+    "optimizer": optimizer.state_dict(),
+    "scheduler": scheduler.state_dict(),
+    "args": args,
+    "scaler": scaler.state_dict(),
+    "best_fid": best_fid,
+}
 ```
 
-Not tracked:
+## 7. Reproducibility Notes
 
-```text
-raw assets
-processed image/index exports
-checkpoints and model weights
-generated PNGs
-logs and output folders
-external baseline repositories
-```
+- Raw data, checkpoints, generated PNGs, and baseline outputs are gitignored.
+- The DDP eval loop gathers `trt2ctrl_idx.json` mappings across ranks before
+  writing, preserving complete treated→control metadata.
+- Detailed architecture docs in `docs/ARCHITECTURE.md`.
+- See `docs/SCIENTIFIC_STORY.md` for the paper narrative and experiment rationale.

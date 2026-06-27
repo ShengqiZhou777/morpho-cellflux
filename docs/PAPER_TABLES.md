@@ -1,138 +1,119 @@
-# PhenoFlux Paper — Table Spec (BIBM: ≤8 pages, 2 tables, 3 figures)
+# PhenoFlux Paper — Table Spec
 
-## Table 1: Main Results
+## Table 1: Main Results (Diet)
 
 Diet only. All methods evaluated on the same 3-channel panel `[9,5,8]`
-(Calreticulin / Perilipin / TOMM20), same 5K matched-N protocol
-(2466 per condition, N=4932 pooled). Baselines use one-hot condition `[adlib/fasted/hfd]`;
-PhenoFlux additionally consumes the full 18-channel marker profile via MAC/CCM.
+(Calreticulin / Perilipin / TOMM20), same matched-N protocol. Baselines receive
+one-hot condition `[adlib/fasted/hfd]`; PhenoFlux additionally consumes the
+full 18-channel marker profile via MSA/PCD.
 
 | Method | Type | Venue | FIDo↓ | FIDc↓ | KIDo↓ | KIDc↓ | MoA↑ | gap_closed↑ |
 |---|---|---|---|---|---|---|---|---|
-| PhenDiff | Diffusion I2I translation | MICCAI 2024 | 10.92 | 13.97 | 0.0066 | 0.0075 | 60.69 | — |
-| IMPA | Autoencoder-GAN | Nat.Comms 2025 | 52.29 | 55.43 | 0.0407 | 0.0424 | 48.5 | — |
-| StarGAN | GAN I2I translation | CVPR 2018 | — | — | — | — | 46.3 | — |
-| MorphoDiff | Diffusion generation | MICCAI 2024 | — | — | — | — | — | — |
-| CellFlux | Flow Matching | ICML 2025 | — | — | — | — | **76.66** | — |
-| **PhenoFlux** | FM + MAC/CCM | ours | — | — | — | — | — | — |
+| PhenDiff | Diffusion I2I | MICCAI 2024 | — | — | — | — | — | — |
+| IMPA | Autoencoder-GAN | Nat.Comms 2025 | — | — | — | — | — | — |
+| StarGAN | GAN I2I | CVPR 2018 | — | — | — | — | — | — |
+| MorphoDiff | Diffusion | MICCAI 2024 | — | — | — | — | — | — |
+| CellFlux | Flow Matching | ICML 2025 | — | — | — | — | — | — |
+| **PhenoFlux** | FM + MSA/PCD | ours | — | — | — | — | — | — |
 
-**Notes:**
-- FIDo/FIDc: overall / conditional FID (pooled vs per-condition average).
-- KIDo/KIDc: Kernel Inception Distance (unbiased, no Gaussian assumption). CellFlux & MorphGen both report FID/KID pairs.
-- MoA: InceptionV3 classifier accuracy (fasted vs hfd) trained on real Diet treated images; real ceiling = 78.64%.
-- gap_closed: pooled Wasserstein distance over 3 marker channels — the primary biological metric.
-- Baselines only receive one-hot condition [3]; PhenoFlux receives one-hot [3] + 18-ch marker profile via MAC/CCM.
-- **This discrepancy is addressed by the information-control row in Table 2.**
-- PhenDiff FID/KID/MoA: from 5K matched-N protocol (N=4932); MoA=60.69 on 4932 samples.
-- IMPA FID/KID: from 5K matched-N protocol; MoA=48.5 on 5K protocol.
-- StarGAN MoA=46.3: on 5K matched-N protocol; FID/KID pending.
-- CellFlux MoA=76.66: **5K confirmed** (ep11, init=1, CFG=3.0, 2592 fasted + 2408 hfd, FID=25.51). Training CFG=0.2, eval CFG swept 0.5-3.0; CFG=3.0 is the optimal eval setting.
-- StarGAN/IMPA FID/KID pending final 5K re-eval with matched protocol.
+## Table 2: Diet Ablation — Information × Architecture
 
----
+All rows use identical training hyperparameters (use_initial=1, cfg_scale=0.2,
+AdamW lr=1e-4, 20 epochs). 3-channel `[9,5,8]` output. Only conditioning and
+architectural modules vary.
 
-## Table 2: Ablation — Information × Architecture
-
-All rows use **identical training hyperparameters** (USE_INITIAL=1, CFG=0.2,
-AdamW lr=1e-4, 20 epochs, foreground loss). Generated images are always
-3-channel `[9,5,8]`. The only differences are conditioning information and
-architectural modules.
-
-| Conditioning | MAC | CCM | FIDc↓ | KIDc↓ | MoA↑ | gap_closed↑ |
-|---|---|---|---|---|---|---|
-| one-hot [3] | ❌ | ❌ | — | — | — | — |
-| one-hot [3] + 18-ch marker | ❌ | ❌ | — | — | — | — |
-| one-hot [3] + 18-ch marker | ✅ | ❌ | — | — | — | — |
-| one-hot [3] + 18-ch marker | ❌ | ✅ | — | — | — | — |
-| **one-hot [3] + 18-ch marker** | **✅** | **✅** | — | — | — | — |
+| Row | Config | Condition | MSA | PCD | FIDc↓ | gap_closed↑ |
+|---|--------|--------|---|---|---|----|
+| 1 | `phenoflux_diet` | one-hot [3] | ❌ | ❌ | — | — |
+| 2 | `phenoflux_diet_18ch` | one-hot [3] + 18ch naive | ❌ | ❌ | — | — |
+| 3 | `phenoflux_diet_msa` | one-hot [3] + MSA [67] | ✅ | ❌ | — | — |
+| 4 | `phenoflux_diet_msa_pcd` | one-hot [3] + MSA [67] | ✅ | ✅ | — | — |
 
 **What each row tests:**
 
-| Row | Configuration | Answers |
-|---|---|---|
-| 1 | CellFlux repro (diet_id v4) | FM baseline with minimal information |
-| 2 | diet_id_18ch (condition_dim=21, naive concat) | **Information control** — same 18-ch info as ours, but no architecture to consume it |
-| 3 | phenoflux_diet_no_ccm (MAC only) | MAC cross-attention contribution |
-| 4 | phenoflux_diet_no_mac (CCM only) | CCM per-channel FiLM contribution |
-| 5 | phenoflux_diet (Full PhenoFlux) | Complete model |
+| Row | Answers |
+|---|--------|
+| 1 | Flow matching baseline with minimal condition |
+| 2 | **Information control**: same 18ch info as rows 3–4, but naive concat — no learned architecture |
+| 3 | MSA contribution: does learned marker self-attention outperform naive concat? |
+| 4 | PCD contribution: does per-channel modulation add gain beyond MSA alone? |
 
-**Key story for rebuttal:** Row 2 has the same 18-channel marker profile as
-Rows 3-5 but only naive concat into the condition vector — if gap_closed
-doesn't improve over Row 1, it proves the architecture (MAC/CCM), not the
-extra information, drives performance.
+Key contrast: Rows 1→2→3→4 is a cumulative gain chain. Row 2 has the same
+18-channel marker profile as Rows 3–4 — if it doesn't improve over Row 1,
+the architecture (MSA/PCD), not the extra information, drives performance.
 
----
+## Table 3: CRISPR Ablation
+
+CRISPR only. All methods evaluated on 3-channel panel `[9,5,10]`
+(Calreticulin / Perilipin / pS6RP), 40 paper-core genes in 7 functional
+programs (Saunders et al., Cell 2025).
+
+| Row | Config | Prior | Proves |
+|---|--------|-------|--------|
+| 1 | `phenoflux_crispr` | none (40-dim one-hot) | Flow matching baseline |
+| 2 | `phenoflux_crispr_msa_pcd` | MSA + PCD | Marker prior generalizes across datasets |
+| 3 | `phenoflux_crispr_pcge` | PCGE | Program hierarchy helps gene-level modeling |
+| 4 | `phenoflux_crispr_pcge_msa_pcd` | PCGE + MSA + PCD | Both priors are composable and complementary |
+
+Key contrasts:
+- **1→2**: MSA+PCD cross-dataset generalization (same 18ch data, different task)
+- **2→4**: PCGE adds orthogonal value beyond MSA+PCD
+- **1→3→4**: isolated and combined contribution of PCGE
 
 ## Configs Quick Reference
 
 ```
-Row 1:  CONFIG=diet_id
-Row 2:  CONFIG=diet_id_18ch       (condition_dim=21, use_marker_profile=true, no MAC/CCM)
-Row 3:  CONFIG=phenoflux_diet_no_ccm   (use_mac=true,  use_ccm=false)
-Row 4:  CONFIG=phenoflux_diet_no_mac   (use_mac=false, use_ccm=true)
-Row 5:  CONFIG=phenoflux_diet          (use_mac=true,  use_ccm=true)
+Diet:
+  Row 1: CONFIG=phenoflux_diet              (condition_dim=3)
+  Row 2: CONFIG=phenoflux_diet_18ch         (condition_dim=21, use_marker_profile=true)
+  Row 3: CONFIG=phenoflux_diet_msa          (condition_dim=67, use_msa=true)
+  Row 4: CONFIG=phenoflux_diet_msa_pcd      (condition_dim=67, use_msa=true, use_pcd=true)
+
+CRISPR:
+  Row 1: CONFIG=phenoflux_crispr            (condition_dim=40)
+  Row 2: CONFIG=phenoflux_crispr_msa_pcd    (condition_dim=67, use_msa=true, use_pcd=true)
+  Row 3: CONFIG=phenoflux_crispr_pcge       (condition_dim=40, use_pcge=true)
+  Row 4: CONFIG=phenoflux_crispr_pcge_msa_pcd (condition_dim=67, use_msa/pcd/pcge=true)
 ```
 
----
-
-## Figures (3 total, essential for 8 pages)
+## Figures (3)
 
 ### Figure 1: PhenoFlux Architecture Overview
-- Left: CellFlux baseline (one-hot → timestep embed, broadcast to UNet)
-- Right: PhenoFlux (one-hot + 18-channel marker profile → MAC: MarkerEncoder
-  → cross-attention at bottleneck, CCM: per-channel FiLM at output)
-- Highlight: 18-channel profile → tokens → UNet bottleneck queries via cross-attention
+- Left: Flow matching UNet baseline (one-hot → timestep embed)
+- Right: PhenoFlux with pluggable molecular priors
+  - MSA: 18ch population-mean → TransformerEncoder self-attention → 64-dim context
+  - PCD: MSA context → per-channel (scale, bias) FiLM on 3ch UNet output
+  - PCGE: 40-dim one-hot replaced by K=7 hierarchical program embedding
+- Highlight: all modules plug into the same UNet body via YAML config flags
 
-### Figure 2: Marker Distribution Transport
+### Figure 2: Marker Distribution Transport (Diet)
 - Per-channel KDE overlay: generated fasted/HFD vs real fasted/HFD
 - 3 subplots (Calreticulin, Perilipin, TOMM20)
-- Mean-shift bar chart for all 18 marker channels (ours only, showing full-profile transport)
+- Mean-shift bar chart for all 18 marker channels
 
-### Figure 3: Qualitative — Generated vs Real HFD
-- Gallery grid: generated HFD cells (PhenoFlux) vs real HFD cells
+### Figure 3: Qualitative — Generated vs Real
+- Gallery grid: generated vs real perturbed cells
 - NOT paired — clearly labeled as population samples
 
----
-
-## Page Budget (8 pages IEEE 2-column)
-
-| Section | Pages |
-|---|---|
-| Abstract + Introduction | 1.5 |
-| Related Work | 0.5 |
-| Method (PhenoFlux) | 1.5 |
-| Experiments | 2.5 |
-| - Setup + Table 1 | 1.0 |
-| - Table 2 + ablation discussion | 0.5 |
-| - Figure 2/3 qualitative | 0.5 |
-| - Main findings | 0.5 |
-| Discussion + Conclusion | 1.0 |
-| References | 1.0 |
-| **Total** | **8.0** |
-
----
-
-## Required Experiments (complete before filling tables)
+## Required Experiments
 
 | # | What | Config | Status |
 |---|---|---|---|
-| T1 | PhenoFlux (Full) training | phenoflux_diet | 🔄 epoch 11/20 |
-| T2 | PhenoFlux (Full) 5K eval + MoA + gap_closed | phenoflux_diet | ⏳ after T1 |
-| T3 | −CCM ablation training | phenoflux_diet_no_ccm | ⏳ |
-| T4 | −MAC ablation training | phenoflux_diet_no_mac | ⏳ |
-| T5 | naive 18ch training | diet_id_18ch | ⏳ |
-| T6 | Ablation rows 5K eval | — | ⏳ after T3-T5 |
-| T7 | PhenDiff 5K eval + gap_closed | diet_id | ⏳ (generated, need re-eval) |
-| T8 | IMPA 5K eval + gap_closed | diet_id | ⏳ |
-| T9 | StarGAN 5K eval + gap_closed | diet_id | ⏳ (checkpoint exists) |
-| T10 | MorphoDiff adapter + train + eval | diet_id | ⏳ (adapter needed) |
-| T11 | CellFlux v4 eval (baseline row) | diet_id | ✅ **5K done**: MoA=76.66%, FID=25.51 (ep11, init=1, CFG=3.0) |
-
-**Parallel schedule after T1 completes:**
-```
-GPU 0: T3 (−CCM) ──────────────────────────→ T6 eval
-GPU 1: T4 (−MAC) ──────────────────────────→ T6 eval
-GPU 0: T5 (naive 18ch) ─────────────────────→ T6 eval
-GPU 1: T10 (MorphoDiff adapter + train) ──→ T10 eval
-Both:  T7−T9 (baseline eval, no training needed)
-```
+| **Diet** ||||
+| D1 | Baseline training | phenoflux_diet | 🔄 |
+| D2 | 18ch info-control training | phenoflux_diet_18ch | ⏳ |
+| D3 | MSA-only training | phenoflux_diet_msa | ⏳ |
+| D4 | MSA+PCD training | phenoflux_diet_msa_pcd | ⏳ |
+| D5 | All Diet 5K eval + metrics | — | ⏳ |
+| **CRISPR** ||||
+| C1 | Baseline training | phenoflux_crispr | ⏳ |
+| C2 | MSA+PCD training | phenoflux_crispr_msa_pcd | ⏳ |
+| C3 | PCGE training | phenoflux_crispr_pcge | ⏳ |
+| C4 | PCGE+MSA+PCD training | phenoflux_crispr_pcge_msa_pcd | ⏳ |
+| C5 | All CRISPR eval + metrics | — | ⏳ |
+| **Baselines** ||||
+| B1 | PhenDiff eval + gap_closed | — | ⏳ |
+| B2 | IMPA eval + gap_closed | — | ⏳ |
+| B3 | StarGAN eval + gap_closed | — | ⏳ |
+| B4 | MorphoDiff adapter + train + eval | — | ⏳ |
+| B5 | CellFlux baseline eval | phenoflux_diet | ⏳ |

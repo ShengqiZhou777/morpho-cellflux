@@ -1,0 +1,27 @@
+# Diet hepatocytes — baseline UNet.
+# Condition = diet state (adlib / fasted / hfd), 3-dim one-hot.
+# No molecular prior.  No marker profile.
+# Image panel: channels [9,5,8] = Calreticulin / Perilipin / TOMM20.
+task_name: diet_id
+ood_set: null
+mol_list: null
+trainable_emb: false
+dataset_name: perturbmulti
+dataset: phenoflux
+n_channels: 3
+channels: [9, 5, 8]
+multimodal: false
+batch_correction: false
+batch_key: null
+use_condition_embeddings: false
+add_controls: false
+condition_embedding_dimension: null
+modality_list:
+  - Gene
+image_path: data/raw/diet/images
+data_index_path: data/processed/diet/index_diet.csv
+embedding_path: data/processed/diet/embedding_diet.csv
+augment_train: true
+normalize: false
+# PhenoFlux molecular prior (baseline: none)
+base_condition_dim: 3

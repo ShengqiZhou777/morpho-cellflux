@@ -23,23 +23,17 @@ DEFAULT_RUNS = {
             "outputs/baselines/impa/diet",
             "outputs/baselines/impa/diet_v3",
         ],
-        "CellFlux-style": [
-            "outputs/baselines/cellflux/diet",
-            "outputs/runs/diet/diet_id_v1",
-        ],
+        "CellFlux": "outputs/runs/diet/cellflux_diet_5k_v1",
         "MorphoDiff": "outputs/baselines/morphodiff/diet",
-        "Morpho-CellFlux": [
-            "outputs/runs/diet/main",
-            "outputs/runs/diet/diet_id_v3",
-        ],
+        "MSA+PCD": "outputs/runs/diet/diet_id_msa_pcd_5k_v1",
     },
     "crispr_paper": {
         "StarGAN": "outputs/baselines/stargan/crispr_paper",
         "PhenDiff": "outputs/baselines/phendiff/crispr_paper",
         "IMPA": "outputs/baselines/impa/crispr_paper",
-        "CellFlux-style": "outputs/baselines/cellflux/crispr_paper",
+        "CellFlux": "outputs/runs/crispr/perturbmulti_id_v1",
         "MorphoDiff": "outputs/baselines/morphodiff/crispr_paper",
-        "Morpho-CellFlux": "outputs/runs/crispr/paper_core",
+        "PhenoFlux": "outputs/runs/crispr/phenoflux_crispr_v2",
     },
 }
 

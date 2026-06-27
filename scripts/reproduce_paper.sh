@@ -1,116 +1,102 @@
 #!/usr/bin/env bash
-# ============================================================================
-# PhenoFlux Paper — Reproduction Script (cleaned)
-# ============================================================================
-#
-# Three models — one command each:
-#
-#   CellFlux baseline (one-hot only):
-#     CONFIG=diet_id DATASET=diet_id bash scripts/train.sh
-#
-#   MSA (Marker Self-Attention):
-#     CONFIG=diet_id_msa DATASET=diet_id_msa bash scripts/train.sh
-#
-#   MSA + PCD (final model):
-#     CONFIG=diet_id_msa_pcd DATASET=diet_id_msa_pcd bash scripts/train.sh
-#
-# Eval (all models, CFG=3.0):
-#   bash scripts/reproduce_paper.sh eval
-#
-# Usage:
-#   bash scripts/reproduce_paper.sh all
-# ============================================================================
-
+# Reproduce all PhenoFlux paper experiments.
+# Run after data preparation (build_diet_data.py, build_crispr_paper_data.py).
+# Uses 2 GPUs with automatic parallel scheduling.
 set -euo pipefail
 
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-cd "$REPO_ROOT"
+PROJECT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+cd "$PROJECT_DIR"
 
-NPROC=${NPROC:-2}
-BATCH=${BATCH:-16}
+# --- Configuration ---
 EPOCHS=${EPOCHS:-20}
 EVAL_FREQ=${EVAL_FREQ:-5}
-FID_SAMPLES=${FID_SAMPLES:-1000}
-CFG_EVAL=${CFG_EVAL:-3.0}
+FID_SAMPLES=${FID_SAMPLES:-5120}
+BATCH=${BATCH:-16}
+NPROC=${NPROC:-2}
+SUBSET=${SUBSET:-5k}   # 5k for ablation, full for final results
+SKIP_DONE=${SKIP_DONE:-1}
 
-train_one() {
-  local NAME="$1" CONFIG="$2" DATASET="$3"
-  local OUT="$REPO_ROOT/outputs/paper/$NAME"
-  echo "=== TRAIN: $NAME ==="
-  mkdir -p "$OUT"
-  PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \
-  torchrun --standalone --nproc_per_node="$NPROC" \
-    -m morphoflux.engine.train \
-    --dataset "$DATASET" --config "$CONFIG" --device cuda \
-    --batch_size "$BATCH" --accum_iter 1 --num_workers 10 \
-    --epochs "$EPOCHS" --eval_frequency "$EVAL_FREQ" \
-    --use_initial 1 --use_ema --skewed_timesteps \
-    --class_drop_prob 0.2 --cfg_scale 0.2 \
-    --compute_fid --fid_samples "$FID_SAMPLES" --save_fid_samples \
-    --foreground_loss \
-    --foreground_threshold 0.05 --foreground_weight 5.0 --background_weight 0.1 \
-    --ode_options '{"step_size": 0.02}' \
-    --output_dir "$OUT" \
-    2>&1 | tee "$OUT/train_stdout.log"
-}
+echo "=== PhenoFlux Paper Experiments ==="
+echo "Subset: $SUBSET  Epochs: $EPOCHS  GPUs: $NPROC"
 
-eval_one() {
-  local NAME="$1" CONFIG="$2" DATASET="$3" CKPT_EPOCH="$4"
-  local OUT="$REPO_ROOT/outputs/paper/$NAME"
-  local CKPT="$OUT/checkpoint-${CKPT_EPOCH}.pth"
-  local EVAL_DIR="$OUT/eval_cfg${CFG_EVAL}_ep${CKPT_EPOCH}"
+SUFFIX=""
+INDEX="index_diet.csv"
+if [[ "$SUBSET" == "5k" ]]; then
+  SUFFIX="_5k"
+  INDEX="index_diet_5k.csv"
+elif [[ "$SUBSET" == "10k" ]]; then
+  SUFFIX="_10k"
+  INDEX="index_diet_10k.csv"
+elif [[ "$SUBSET" == "mini" ]]; then
+  SUFFIX="_mini"
+  INDEX="index_diet_mini.csv"
+fi
 
-  if [ ! -f "$CKPT" ]; then
-    echo "SKIP $NAME: checkpoint not found: $CKPT"
+run_experiment() {
+  local NAME="$1" CONFIG="$2" DATASET="$3" OUT="$4"
+  shift 4
+  local EXTRA=("$@")
+
+  OUT="outputs/runs/diet/${NAME}${SUFFIX}_v1"
+  if [[ "$SKIP_DONE" == "1" ]] && [[ -f "$OUT/checkpoint-${EPOCHS}.pth" ]]; then
+    echo "[skip] $NAME — checkpoint already exists at $OUT"
     return
   fi
-
-  echo "=== EVAL: $NAME CFG=$CFG_EVAL ==="
-  torchrun --standalone --nproc_per_node="$NPROC" \
-    -m morphoflux.engine.train \
+  echo "=== Training: $NAME ==="
+  mkdir -p "$OUT"
+  PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \
+  torchrun --standalone --nproc_per_node="$NPROC" -m phenoflux.train \
     --dataset "$DATASET" --config "$CONFIG" --device cuda \
-    --eval_only --resume "$CKPT" \
-    --use_initial 1 --cfg_scale "$CFG_EVAL" --use_ema \
-    --fid_samples "$FID_SAMPLES" --compute_fid --save_fid_samples \
-    --output_dir "$EVAL_DIR"
-
-  # gap_closed
-  local EPOCH_DIR=$(ls -d "$EVAL_DIR"/fid_samples/epoch-* | head -1)
-  local EVAL_EPOCH=$(basename "$EPOCH_DIR" | sed 's/epoch-//')
-  python scripts/diet_marker_distribution_figure.py \
-    --run-dir "$EVAL_DIR" --epoch "$EVAL_EPOCH" \
-    --out-dir "$EVAL_DIR" --prefix "${NAME}_cfg${CFG_EVAL}"
-
-  # MoA
-  python src/morphoflux/engine/moa/train_moa.py \
-    --config_path "configs/${CONFIG}.yaml" --mode eval \
-    --img_root_path "$EPOCH_DIR" \
-    --ckpt_path outputs/baselines/moa/diet/condition_classifier.pth \
-    --out_json "$EVAL_DIR/moa_result.json"
+    --batch_size "$BATCH" --accum_iter 1 --num_workers 10 --epochs "$EPOCHS" \
+    --use_initial 1 --use_ema --skewed_timesteps \
+    --class_drop_prob 0.2 --cfg_scale 0.2 \
+    --eval_frequency "$EVAL_FREQ" --compute_fid --fid_samples "$FID_SAMPLES" \
+    --save_fid_samples --foreground_loss --foreground_threshold 0.05 \
+    --foreground_weight 5.0 --background_weight 0.1 \
+    --output_dir "$OUT" "${EXTRA[@]}" 2>&1 | tee "$OUT/train.log"
 }
 
-cmd_train() {
-  train_one "cellflux_baseline" "diet_id" "diet_id"
-  train_one "msa" "diet_id_msa" "diet_id_msa"
-  train_one "msa_pcd" "diet_id_msa_pcd" "diet_id_msa_pcd"
+# --- Diet Experiments ---
+echo ""
+echo "=== Phase 1: Diet Ablation ==="
+
+run_experiment "diet_id"           "diet_id${SUFFIX}"        "diet_id"
+run_experiment "diet_id_18ch"      "diet_id_18ch${SUFFIX}"   "diet_id_18ch"
+run_experiment "diet_id_msa"       "diet_id_msa${SUFFIX}"    "diet_id_msa"
+run_experiment "diet_id_msa_pcd"   "diet_id_msa_pcd${SUFFIX}" "diet_id_msa_pcd"
+
+# --- CRISPR Experiments ---
+echo ""
+echo "=== Phase 2: CRISPR Experiments ==="
+
+run_experiment_crispr() {
+  local NAME="$1" CONFIG="$2" DATASET="$3"
+  local OUT="outputs/runs/crispr/${NAME}_v1"
+
+  if [[ "$SKIP_DONE" == "1" ]] && [[ -f "$OUT/checkpoint-${EPOCHS}.pth" ]]; then
+    echo "[skip] $NAME — checkpoint already exists at $OUT"
+    return
+  fi
+  echo "=== Training: $NAME ==="
+  mkdir -p "$OUT"
+  PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \
+  torchrun --standalone --nproc_per_node="$NPROC" -m phenoflux.train \
+    --dataset "$DATASET" --config "$CONFIG" --device cuda \
+    --batch_size "$BATCH" --accum_iter 1 --num_workers 10 --epochs "$EPOCHS" \
+    --use_initial 1 --use_ema --skewed_timesteps \
+    --class_drop_prob 0.2 --cfg_scale 0.2 \
+    --eval_frequency "$EVAL_FREQ" --compute_fid --fid_samples "$FID_SAMPLES" \
+    --save_fid_samples --foreground_loss --foreground_threshold 0.05 \
+    --foreground_weight 5.0 --background_weight 0.1 \
+    --output_dir "$OUT" 2>&1 | tee "$OUT/train.log"
 }
 
-cmd_eval() {
-  eval_one "cellflux_baseline" "diet_id" "diet_id" 19
-  eval_one "msa" "diet_id_msa" "diet_id_msa" 19
-  eval_one "msa_pcd" "diet_id_msa_pcd" "diet_id_msa_pcd" 19
-}
+run_experiment_crispr "perturbmulti_id"     "perturbmulti_id"     "perturbmulti_id"
+run_experiment_crispr "perturbmulti_idsig"  "perturbmulti_idsig"  "perturbmulti_idsig"
+run_experiment_crispr "perturbmulti_pcge"   "perturbmulti_pcge"   "perturbmulti_pcge"
 
-cmd_all() {
-  cmd_train
-  cmd_eval
-}
-
-case "${1:-all}" in
-  train) cmd_train ;;
-  eval)  cmd_eval ;;
-  all)   cmd_all ;;
-  *)
-    echo "Usage: bash scripts/reproduce_paper.sh {train|eval|all}"
-    ;;
-esac
+echo ""
+echo "=== All experiments launched ==="
+echo "Evaluate with:"
+echo "  python scripts/aggregate_eval.py outputs/runs/diet/<name>${SUFFIX}_v1 5"
+echo "  python scripts/aggregate_eval.py outputs/runs/crispr/<name>_v1 5"

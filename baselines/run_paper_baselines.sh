@@ -48,20 +48,6 @@ ensure_export() {
   echo "[$(date -Is)] DONE export $benchmark"
 }
 
-  local benchmark="$1"
-  local config
-  config="$(benchmark_config "$benchmark")"
-
-  if summary_exists "$out"; then
-    return
-  fi
-
-    --config "$config" \
-    --output "$out" \
-    --split test
-  python scripts/aggregate_eval.py "$out" 5 0
-}
-
 run_phendiff_for() {
   local benchmark="$1"
   local out="outputs/baselines/phendiff/$benchmark"
@@ -125,9 +111,6 @@ echo "benchmarks=$BENCHMARKS"
 
 for benchmark in $BENCHMARKS; do
   ensure_export "$benchmark"
-  if [[ "$INCLUDE_COPY_CONTROL" == "1" ]]; then
-  else
-  fi
   run_phendiff_for "$benchmark"
   run_impa_for "$benchmark"
   run_stargan_for "$benchmark"

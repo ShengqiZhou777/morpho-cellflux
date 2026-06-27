@@ -2,7 +2,7 @@
 
 **Single source of truth for how methods are compared on Perturb-Multi.**
 
-We still report the CellFlux-style metric suite so the work is comparable to
+We report the CellFlux-style metric suite so the work is comparable to
 CellFlux and its baselines. But Perturb-Multi is a multiplexed molecular marker
 readout, not ordinary RGB morphology. Therefore FID/KID are image-realism and
 comparability metrics, while marker-distribution transport is the primary
@@ -10,7 +10,7 @@ biological-fidelity metric.
 
 Provenance:
 
-- CellFlux (Zhang et al., arXiv:2502.09775): FIDo/FIDc/KIDo/KIDc, MoA, and
+- CellFlux (Zhang et al., ICML 2025): FIDo/FIDc/KIDo/KIDc, MoA, and
   sample-size sensitivity.
 - Perturb-Multi paper: 18-target marker panel of protein markers for
   subcellular structures/signaling pathways plus abundant RNAs.
@@ -21,13 +21,13 @@ Report all metrics, but keep their roles separate.
 
 | Family | Metric | Definition | Direction | Role here |
 |---|---|---|---|---|
-| Image quality / comparability | FIDo | overall FID: all generated vs all real perturbed, pooled | lower better | CellFlux-style image realism |
-| Image quality / comparability | FIDc | conditional FID: per perturbation class, then averaged | lower better | class-balanced image realism |
-| Image quality / comparability | KIDo | overall KID | lower better | FID robustness check |
-| Image quality / comparability | KIDc | conditional KID | lower better | class-balanced KID |
-| Condition separability | MoA Acc / Macro-F1 / Weighted-F1 | classifier trained on real perturbed images, evaluated on generated images | higher better | auxiliary biological proxy if the real-image ceiling is above chance; CRISPR paper core reports program-level labels |
-| Marker phenotype | gap_closed | `1 - W(gen,tgt) / W(ctrl,tgt)` on per-cell marker foreground means | higher better | primary Diet biological metric |
-| Marker phenotype | dir_corr / sign_agree | recovery of `(gen-ctrl)` vs `(real-ctrl)` perturbation direction across genes | higher better | primary CRISPR biological metric |
+| Image quality | FIDo | overall FID: all generated vs all real perturbed, pooled | lower better | CellFlux-style image realism |
+| Image quality | FIDc | conditional FID: per perturbation class, then averaged | lower better | class-balanced image realism |
+| Image quality | KIDo | overall KID | lower better | FID robustness check |
+| Image quality | KIDc | conditional KID | lower better | class-balanced KID |
+| Condition separability | MoA Acc / Macro-F1 / Weighted-F1 | classifier trained on real perturbed images, evaluated on generated images | higher better | auxiliary biological proxy; CRISPR reports program-level labels |
+| Marker phenotype | gap_closed | `1 − W(gen,tgt) / W(ctrl,tgt)` on per-cell marker foreground means | higher better | primary Diet biological metric |
+| Marker phenotype | dir_corr / sign_agree | recovery of `(gen−ctrl)` vs `(real−ctrl)` perturbation direction across genes | higher better | primary CRISPR biological metric |
 
 FID/KID use Inception features on rendered 3-channel PNGs. Those PNGs are
 false-color marker panels, so Inception realism is not guaranteed to align with
@@ -38,13 +38,13 @@ ceiling. Marker metrics directly measure the data's biological readout.
 
 FID is useful, but it answers a narrower question:
 
-```text
+```
 Do generated images look like the real image distribution in Inception feature space?
 ```
 
 The Perturb-Multi biological question is different:
 
-```text
+```
 Did the generated marker population move from control toward the treated marker population?
 ```
 
@@ -96,7 +96,6 @@ methods inside the same table.
 | Treated classes | fasted, hfd | 40 target genes grouped into 7 original-paper programs |
 | Active panel | `[9,5,8]` Calreticulin / Perilipin / TOMM20 | `[9,5,10]` Calreticulin / Perilipin / pS6RP |
 | Main biological metric | per-condition marker gap closure | direction recovery and pooled marker gap closure |
-| Current proposed run | `outputs/runs/diet/fid5k` | `outputs/runs/crispr/paper_core` |
 
 Diet is the strong physiological demonstration. CRISPR is the clean gene-identity
 benchmark but has weaker effects and should be reported distributionally.
@@ -109,8 +108,8 @@ MoA.
 
 | dataset | interpretation |
 |---|---|
-| Diet | usable: real treated images are separable above chance; this mirrors the Perturb-Multi VQ-VAE auxiliary task that predicts diet condition from morphology embeddings |
-| CRISPR paper core | report program-level `Program-Acc`, `Program-Macro-F1`, and `Program-Weighted-F1` over the 7 original-paper programs; gene-level MoA is supplementary only |
+| Diet | usable: real treated images are separable above chance; mirrors the Perturb-Multi VQ-VAE auxiliary task that predicts diet condition from morphology embeddings |
+| CRISPR | report program-level `Program-Acc`, `Program-Macro-F1`, and `Program-Weighted-F1` over the 7 original-paper programs; gene-level MoA is supplementary only |
 
 MoA is still not a perfect biological metric. A method can increase condition
 classifier accuracy by producing class-specific artifacts. Read it together with
@@ -126,10 +125,10 @@ For every generated PNG:
 4. If `trt2ctrl_idx.json` has a mapping, read the paired control cell.
 5. For each Diet condition or CRISPR channel/gene group, compute:
 
-```text
-W_gen = Wasserstein(generated_marker_means, target_marker_means)
+```
+W_gen  = Wasserstein(generated_marker_means, target_marker_means)
 W_ctrl = Wasserstein(control_marker_means, target_marker_means)
-gap_closed = 1 - W_gen / W_ctrl
+gap_closed = 1 − W_gen / W_ctrl
 ```
 
 Interpretation:
@@ -142,36 +141,24 @@ Interpretation:
 
 For CRISPR, also compute `dir_corr` and `sign_agree` across genes:
 
-```text
-generated shift = generated_gene_mean - control_gene_mean
-real shift = real_treated_gene_mean - control_gene_mean
+```
+generated shift = generated_gene_mean − control_gene_mean
+real shift      = real_treated_gene_mean − control_gene_mean
 ```
 
 ## 7. Current Diet 5K Marker Evidence
 
 Script:
 
-```text
-python scripts/diet_marker_distribution_figure.py \
-  --run-dir outputs/runs/diet/fid5k \
-  --epoch 12 \
-  --out-dir outputs/figures/diet \
-  --prefix diet_fid5k
+```
+python scripts/aggregate_eval.py outputs/runs/diet/<run> 5 <epoch>
+python phenoflux/eval/figures.py --run-dir outputs/runs/diet/<run> --epoch <epoch> ...
 ```
 
-Outputs:
-
-```text
-outputs/figures/diet/diet_fid5k_marker_distributions.png
-outputs/figures/diet/diet_fid5k_mean_shift.png
-outputs/figures/diet/diet_fid5k_marker_distribution_summary.csv
-outputs/figures/diet/diet_fid5k_marker_distribution_summary.json
-```
-
-Generated-vs-target means:
+Generated-vs-target means (illustrative):
 
 | condition | marker | generated | target | read |
-|---|---|---:|---:|---|
+|---|---:|---:|---:|---|
 | fasted | Calreticulin | 0.3715 | 0.3528 | slight overshoot |
 | fasted | Perilipin | 0.3208 | 0.3123 | slight overshoot |
 | fasted | TOMM20 | 0.4115 | 0.4122 | close |
@@ -188,11 +175,11 @@ that spatial morphology is fully solved.
 
 Evaluation PNGs are saved in:
 
-```text
+```
 <run>/fid_samples/epoch-<epoch>/<condition>/<target_id>.png
 ```
 
-`trt2ctrl_idx.json` maps `target_id -> control_id` and is required for paired
+`trt2ctrl_idx.json` maps `target_id → control_id` and is required for paired
 control gap closure. A DDP bug in older evals let each rank overwrite this JSON,
 so a 2-GPU 5120-image eval could have only 2560 mappings. The eval loop now
 gathers mappings across ranks before the main process writes the JSON.
@@ -207,11 +194,10 @@ For outputs produced before this fix:
 
 - [x] Internal source-control sanity checks archived; not part of the default paper table.
 - [x] PhenDiff / IMPA / StarGAN adapters target Diet and CRISPR paper core.
-- [x] FIDo/FIDc/KIDo/KIDc matched-N tooling.
-- [x] MoA classifier fixed to classify perturbation class (`mols`), not treated/control annotation.
-- [x] Diet 5K proposed eval and matched table.
-- [x] Reproducible Diet marker-distribution figure script.
+- [x] FIDo/FIDc/KIDo/KIDc matched-N tooling in `phenoflux/eval/fid.py`.
+- [x] MoA classifier via `phenoflux/eval/moa.py`.
 - [x] DDP mapping fix for future evals.
+- [x] Baseline comparison tooling in `baselines/`.
 - [ ] Rerun Diet 5K after DDP mapping fix for complete paired control gap closure.
-- [ ] Run `crispr_paper` Morpho-CellFlux and baselines before reporting the paper CRISPR table.
+- [ ] Run `phenoflux_crispr` Morpho-CellFlux and baselines before reporting the paper CRISPR table.
 - [ ] Train/report program-level classifier ceiling before reporting CRISPR Program-Acc/F1.

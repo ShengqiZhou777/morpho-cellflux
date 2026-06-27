@@ -1,0 +1,25 @@
+# CRISPR perturbmulti — baseline UNet with gene identity one-hot.
+# 40-dim one-hot over the paper-core 40-gene perturbation vocabulary.
+task_name: crispr_paper_core
+ood_set: null
+mol_list: null
+trainable_emb: false
+dataset_name: perturbmulti
+dataset: phenoflux
+n_channels: 3
+channels: [9, 5, 10]
+multimodal: false
+batch_correction: false
+batch_key: null
+use_condition_embeddings: false
+add_controls: false
+condition_embedding_dimension: null
+modality_list:
+  - Gene
+image_path: data/raw/crispr/images
+data_index_path: data/processed/crispr/index_paper_40.csv
+embedding_path: data/processed/crispr/embedding_paper_40.csv
+augment_train: false
+normalize: false
+# PhenoFlux molecular prior (baseline: none)
+base_condition_dim: 40

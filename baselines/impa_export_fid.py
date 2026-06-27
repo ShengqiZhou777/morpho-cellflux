@@ -52,7 +52,7 @@ def default_impa_args(config: dict, data_dir: Path, experiment_dir: Path) -> Nam
         val_batch_size=8,
         lr=0.0001,
         f_lr=0.0001,
-        beta1=0,
+        beta1=0.0,
         beta2=0.99,
         weight_decay=0.0001,
         num_outs_per_domain=10,

@@ -2,7 +2,7 @@
 set -euo pipefail
 
 BENCHMARK="${BENCHMARK:-diet}"
-EPOCHS="${EPOCHS:-8}"
+EPOCHS="${EPOCHS:-5}"
 BATCH="${BATCH:-16}"
 VAL_BATCH="${VAL_BATCH:-8}"
 # Keep one Lightning process. IMPA wraps its submodules in nn.DataParallel, so

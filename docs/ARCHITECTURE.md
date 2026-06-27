@@ -1,88 +1,185 @@
 # Architecture
 
-`morpho-cellflux` is one Python package (`src/morphoflux/`) plus CLI scripts. It models
-**perturbation -> morphology** on Perturb-Multi CRISPR hepatocyte images: given a control
-cell and a target gene (perturbation identity), generate the perturbed-cell panel.
+PhenoFlux is a Python package (`phenoflux/`) for **cellular phenotype transport** on
+Perturb-Multi hepatocyte images: given a control cell image and a target perturbation
+condition, generate the corresponding perturbed-cell marker panel.
 
-## Pipeline (data -> engine -> evaluation)
+## Pipeline (data → engine → evaluation)
 
 ```
-raw assets (data/raw/)                        h5ad (RNA/protein) + manifest
-        |                                                   |
-        v                                                   v
-  morphoflux.data.DataFactory  ───────────►  scripts/build_crispr_paper_data.py
-  (scripts/materialize_data.py)              - index_paper_programs.csv
-  - manifest.parquet                         - index_paper_programs_heldout.csv
-  - condition_vocab.json                     - embedding_gene_identity.csv
-                                             - program_labels_paper.csv
-                                             - paper_panel_effects.csv
-        |                                                   |
-        └───────────────────────┬───────────────────────────┘
-                                 v
-            morphoflux.engine  (absorbed CellFlux flow-matching engine)
-            torchrun -m morphoflux.engine.train  (scripts/train.sh)
-            - conditional flow matching, control->perturbed, CFG, EMA, ODE sampling, FID
-            - reads configs/<name>.yaml  (MORPHOFLUX_CONFIG_DIR)
-            - writes outputs/<run>/: checkpoints, fid_samples/epoch-<e>/, log.txt
-                                 |
-                                 v
-            evaluation / figures (scripts/, GPU-free, read fid_samples)
-            - aggregate_eval.py    : per-gene per-channel Δ-direction (the metric)
-            - delta_scatter.py     : Δ-direction scatter (the quantitative figure)
-            - population_phenotype.py : control vs generated vs KO distributions (visible effect)
-            - interpolate.sh : interpolation trajectory grid (qualitative)
-            - plot_flow_figure.py : polished trajectory/population figure from interpolation npz
+raw assets (data/raw/)                       h5ad (RNA/protein) + manifest
+        |                                                  |
+        v                                                  v
+  phenoflux training dataloader   ──────────►  scripts/build_crispr_paper_data.py
+  reads index CSV + embedding CSV              scripts/build_diet_data.py
+        |                                       - index CSV + embedding CSV
+        |                                                  |
+        └──────────────────────┬──────────────────────────┘
+                               v
+          phenoflux package  (flow-matching engine adapted from CellFlux)
+          torchrun -m phenoflux.train  (scripts/train.sh)
+          - conditional flow matching, control→perturbed, CFG, EMA, ODE sampling
+          - reads configs/<name>.yaml
+          - writes outputs/<run>/: checkpoints, fid_samples/epoch-<e>/, log.txt
+                               |
+                               v
+          evaluation (phenoflux/eval/, reads fid_samples)
+          - phenoflux/eval/fid.py       : FIDo/c, KIDo/c with matched-N
+          - phenoflux/eval/aggregate.py : gap_closed, dir-corr, sign-agreement
+          - phenoflux/eval/moa.py       : MoA classifier accuracy
+          - phenoflux/eval/figures.py   : marker distribution KDE + bar charts
 ```
 
-## Package layout
-- `src/morphoflux/data/` — `DataFactory`: builds the manifest + condition vocab from raw
-  paired assets. The LIVE data layer; everything downstream consumes its outputs.
-- `src/morphoflux/engine/` — the absorbed CellFlux engine (model, training loop, ODE
-  sampler, FID, CFG). Upstream provenance + our edits in `engine/UPSTREAM.md`. We only
-  added a dataset/condition adapter (`perturbmulti_id` arch, `_load_perturbmulti`, the
-  split branch, per-epoch trt2ctrl, a torch-2.11 load fix); the generative core is upstream.
-- `scripts/` — CLI tools: data build, training/interpolation launchers, evaluation/figures.
-- `configs/` — engine run configs (single source of truth).
-- `data/` (gitignored), `outputs/` (gitignored), `docs/`.
+## Package Layout
 
-## Modality semantics (pinned — do not muddle)
-- **Perturbation = sgRNA -> target gene IDENTITY** (the condition). The paper
-  CRISPR core uses 40 target genes grouped into 7 Perturb-Multi programs.
-- **209-gene MERFISH = a transcriptional READOUT** of the imaged cells (NOT the condition).
-- **18-channel protein/morphology = the imaging READOUT**. The model generates a
-  config-selected 3-channel panel: Diet uses `[9,5,8]` =
-  Calreticulin / Perilipin / TOMM20; CRISPR paper core uses `[9,5,10]` =
-  Calreticulin / Perilipin / pS6RP.
-- Raw sequencing/GEO files are not required for the current pipeline. The
-  paired RNA h5ad is a MERFISH readout for diagnostics; the main model
-  condition remains gene identity.
+- `phenoflux/` — main Python package. Entry: `torchrun -m phenoflux.train`.
+  - `phenoflux/train.py` — entry point, DDP init, main training loop
+  - `phenoflux/args.py` — argument parser
+  - `phenoflux/models/` — UNetModel, MSA, PCD, PCGE, EMA, NN utils
+  - `phenoflux/training/` — training/eval loops, dataloader, DDP, checkpoint
+  - `phenoflux/eval/` — FID/KID, aggregate metrics, MoA classifier, figures
+- `configs/` — 8 paper experiment YAMLs (single source of truth)
+- `scripts/` — data build, train launch, quick validate, reproduce
+- `baselines/` — IMPA, PhenDiff, StarGAN, MorphoDiff adapters
+- `data/` (gitignored) — raw assets, processed indices, embeddings
+- `outputs/` (gitignored) — checkpoints, generated samples, logs, metrics
+- `docs/` — scientific story, architecture, evaluation protocol, reproducing guide
 
-## How to run
+## Molecular Prior Architecture
+
+One UNet body (`phenoflux`), configurable molecular prior via YAML flags:
+
+```
+                    ┌─────────────────────────┐
+Condition (one-hot) │ base_condition_dim      │  3 (diet) / 40 (crispr)
+                    ├─────────────────────────┤
+Marker prior        │ use_msa / use_pcd       │  MSA → PCD (cross-dataset)
+                    │ use_marker_profile      │  Info control: naive 18ch concat
+                    ├─────────────────────────┤
+CRISPR prior        │ use_pcge                │  Program-Conditioned Gene Embedding
+                    ├─────────────────────────┤
+condition_dim       │ auto-computed           │  base + 64 (MSA) or +18 (naive)
+                    └─────────────────────────┘
+```
+
+### MSA (Marker Self-Attention) — Diet + CRISPR
+
+- Input: population-mean 18-channel MERFISH marker profile of target condition
+- TransformerEncoder self-attention over the 18 markers → learns inter-marker
+  co-variation patterns (e.g. Perilipin↑ + Calreticulin↓ = steatosis)
+- Output: 64-dim context vector concatenated to condition embedding
+- ~118K parameters
+
+### PCD (Per-Channel Decoder) — Diet + CRISPR
+
+- Maps MSA context → per-channel (scale, bias) FiLM modulation on UNet's 3ch output
+- 3 output channels each receive independent modulation — different markers respond
+  at different magnitudes to the same perturbation
+- ~2.4K parameters, per-channel only (no spatial dimensions)
+
+### PCGE (Program-Conditioned Gene Embedding) — CRISPR
+
+- Replaces flat 40-dim one-hot lookup with hierarchical K=7 program embedding
+- gene_index → 256-dim gene embedding → cross-attention over K=7 program prototypes
+  → gated fusion (gene-specific vs. program-shared) → projection to 40-dim output
+- Drop-in compatible with the original nn.Embedding interface
+- 40 genes organized into 7 functional programs per Perturb-Multi main text/figure programs
+
+### Info Control
+
+- `use_marker_profile` flag: naive 18ch mean-pool + concat (no learned attention)
+- Same input information as MSA, but no architecture to consume it
+- Answers: does MSA matter, or just having the extra 18ch info?
+
+## Paper Configs (8)
+
+All use `--dataset phenoflux`. `condition_dim` is auto-computed from YAML flags.
+
+| Config | Dataset | Prior | `condition_dim` | Proves |
+|--------|---------|-------|:---:|--------|
+| `phenoflux_diet` | Diet | none | 3 | Flow matching baseline |
+| `phenoflux_diet_18ch` | Diet | naive 18ch concat | 21 | Raw marker info alone helps |
+| `phenoflux_diet_msa` | Diet | MSA | 67 | Learned attention > naive |
+| `phenoflux_diet_msa_pcd` | Diet | MSA+PCD | 67 | Per-channel modulation adds gain |
+| `phenoflux_crispr` | CRISPR | none | 40 | Flow matching baseline |
+| `phenoflux_crispr_msa_pcd` | CRISPR | MSA+PCD | 67 | Marker prior generalizes across datasets |
+| `phenoflux_crispr_pcge` | CRISPR | PCGE | 40 | Program embedding helps |
+| `phenoflux_crispr_pcge_msa_pcd` | CRISPR | PCGE+MSA+PCD | 67 | Both priors composable and complementary |
+
+Data size controlled via `--data_index` CLI (not separate configs):
 ```bash
-pip install -e .            # registers morphoflux + engine (deps in pyproject)
-
-# train (2-GPU DDP), config resolved from configs/
-OUT=outputs/runs/crispr/paper_core CONFIG=crispr_paper_core DATASET=perturbmulti_id \
-  bash scripts/train.sh
-
-# evaluate a run (per-gene Δ-direction for an epoch)
-python scripts/aggregate_eval.py outputs/runs/crispr/paper_core 5 <epoch>
-python scripts/delta_scatter.py  outputs/runs/crispr/paper_core 5
-python scripts/population_phenotype.py outputs/runs/crispr/paper_core lipid Eif2s1,Pten,Aars,Insig1 <epoch>
-
-# qualitative interpolation grid on the best checkpoint
-CKPT=outputs/runs/crispr/paper_core/checkpoint-<e>.pth OUT=outputs/runs/crispr/paper_core \
-  CONFIG=figures/crispr_leadgenes_interp GPU=0 bash scripts/interpolate.sh
-python scripts/plot_flow_figure.py outputs/runs/crispr/paper_core/interpolation --out outputs/figures/crispr_flow.png
+--data_index data/processed/diet/index_diet_2k.csv     # fast dev
+--data_index data/processed/diet/index_diet_5k.csv     # ablation (18k cells)
+--data_index data/processed/diet/index_diet.csv         # full dataset (default)
 ```
 
-## Evaluation philosophy
-**FID is the primary image-quality / distribution metric** (following CellFlux). Because
-the task is unpaired distribution->distribution and per-cell matching is ill-posed, we
-complement FID with **biological-direction metrics**: the **per-gene Δ-direction** (does
-generated move from control toward the real KO, across genes) and the **population
-phenotype shift** (control vs generated vs KO distributions). For subtle in-vivo CRISPR
-effects a good FID does not guarantee the right biological movement, so the two are
-reported together — and FID should not be the *sole* checkpoint-selection criterion (it
-can keep rising while Δ-direction still improves). The interpolation grid is qualitative
-only — its trajectory is always smooth, so it never stands alone as a correctness claim.
+## Data Flow
+
+1. `data_utils.py:read_files_pert` pairs control+treated cells from same batch
+2. `use_initial=1` → ODE starts from control image (not noise)
+3. `marker_profile` = population-mean 18ch profile of target condition (broadcast to spatial)
+4. MSA processes marker_profile internally in UNet.forward() → 64-dim context concatenated to condition
+5. PCD applies per-channel (scale, bias) modulation on UNet output from MSA context
+6. Flow matching: model learns velocity field from control→target
+
+## Critical Design Rules
+
+1. **marker_profile MUST NOT leak into unconditional path.** When `class_drop_prob`
+   triggers CFG dropout, marker_profile must also be absent. UNet handles this
+   via zero-padding condition to expected dim.
+
+2. **EMA unwrapping needed** before checking module flags. Use `getattr(model, 'model', model)`.
+
+3. **MSA/PCD are inside UNetModel** (checkpointed). Not externally constructed.
+
+4. **Every epoch saves checkpoint.** Training can be paused/resumed at any epoch boundary.
+
+5. **`find_unused_parameters=True` is REQUIRED** for DDP — MSA/PCD params may be
+   unused during CFG dropout.
+
+## Evaluation
+
+All metrics in `phenoflux/eval/`:
+
+```bash
+# Image quality — FIDo/c, KIDo/c (matched-N)
+python phenoflux/eval/fid.py --real-dir <real_imgs> --gen-dir <fid_samples/epoch-N> --per-condition-cap 500
+
+# Biological metrics — gap_closed, dir-corr, sign-agreement
+python phenoflux/eval/aggregate.py <eval_dir> 5 <epoch>
+
+# MoA classifier accuracy
+python phenoflux/eval/moa.py --config_path configs/phenoflux_crispr.yaml --mode eval \
+  --img_root_path <eval_dir>/fid_samples/epoch-<N> \
+  --ckpt_path outputs/baselines/moa/crispr/condition_classifier.pth \
+  --out_json <eval_dir>/moa.json
+
+# Marker distribution figures
+python phenoflux/eval/figures.py --run-dir <run_dir> --epoch <N> --out-dir outputs/figures
+```
+
+### Metric Suite
+
+| Family | Metric | Definition | Role |
+|---|---|---|---|
+| Image quality | FIDo/FIDc | overall/conditional FID | CellFlux-style image realism |
+| Image quality | KIDo/KIDc | overall/conditional KID | FID robustness check |
+| Condition separability | MoA Acc/F1 | classifier on generated images | Auxiliary biological proxy |
+| Marker phenotype | gap_closed | `1 − W₁(gen,tgt)/W₁(ctrl,tgt)` | Primary Diet biological metric |
+| Marker phenotype | dir_corr / sign_agree | per-gene perturbation direction recovery | Primary CRISPR biological metric |
+
+## Dataset Mapping
+
+| | Diet | CRISPR |
+|---|---|---|
+| Perturbation | physiological state (adlib/fasted/hfd) | target gene identity |
+| Control | adlib | non-targeting control sgRNA |
+| Treated classes | fasted, hfd | 40 genes in 7 functional programs |
+| Active panel | `[9,5,8]` Calreticulin / Perilipin / TOMM20 | `[9,5,10]` Calreticulin / Perilipin / pS6RP |
+
+## Modality Semantics
+
+- **Perturbation** = condition identity (diet state or target gene). The model condition input.
+- **18-channel MERFISH protein** = the imaging readout. The model generates a config-selected 3-channel panel.
+- **209-gene MERFISH mRNA** = transcriptional readout of imaged cells (diagnostics only).
+- The RGB PNGs are false-color renderings of selected marker channels — not natural-color microscopy.

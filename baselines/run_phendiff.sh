@@ -2,7 +2,7 @@
 set -euo pipefail
 
 BENCHMARK="${BENCHMARK:-diet}"
-EPOCHS="${EPOCHS:-8}"
+EPOCHS="${EPOCHS:-5}"
 BATCH="${BATCH:-16}"
 EVAL_BATCH="${EVAL_BATCH:-16}"
 NB_GENERATED="${NB_GENERATED:-256}"
@@ -76,7 +76,7 @@ done
     --dataloader_num_workers 6 \
     --dataloader_prefetch_factor 2 \
     --max_num_epochs "$EPOCHS" \
-    --eval_save_model_every_epochs 1 \
+    --eval_save_model_every_epochs 2 \
     --nb_generated_images "$NB_GENERATED" \
     --kid_subset_size 128 \
     --guidance_factor "$GUIDANCE" \

@@ -13,7 +13,7 @@ if [[ -z "$TORCHRUN" ]]; then
   exit 127
 fi
 
-OUT=${OUT:-$PROJECT_DIR/outputs/runs/crispr/paper_core}
+OUT=${OUT:-$PROJECT_DIR/outputs/runs/crispr/perturbmulti_id_v1}
 BATCH=${BATCH:-16}          # per-GPU batch size. 16 uses about 25GB and is safe through FID eval on a 32GB card.
 ACCUM=${ACCUM:-1}           # gradient accumulation. Effective batch = BATCH * ACCUM * NPROC, no extra memory.
 EPOCHS=${EPOCHS:-40}
@@ -23,7 +23,7 @@ NPROC=${NPROC:-2}
 USE_INITIAL=${USE_INITIAL:-1}   # 0 = noise to target, 1 = control init, 2 = control plus noise.
 NOISE_LEVEL=${NOISE_LEVEL:-0.2} # noise added to the control image when USE_INITIAL=2.
 CFG=${CFG:-0.2}                 # classifier-free guidance scale at sampling.
-CONFIG=${CONFIG:-crispr_paper_core}      # config name under configs/, selects the data index and embedding.
+CONFIG=${CONFIG:-crispr_paper_core}       # config name under configs/, selects the data index and embedding.
 DATASET=${DATASET:-perturbmulti_id}           # model arch. perturbmulti_id has condition_dim 204 (gene-identity one-hot).
 ODE_OPTIONS=${ODE_OPTIONS:-'{"step_size": 0.02}'}
 FOREGROUND_LOSS=${FOREGROUND_LOSS:-0}
@@ -48,7 +48,7 @@ fi
 mkdir -p "$OUT"
 cd "$PROJECT_DIR"
 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \
-"$TORCHRUN" --standalone --nproc_per_node="$NPROC" -m morphoflux.engine.train \
+"$TORCHRUN" --standalone --nproc_per_node="$NPROC" -m phenoflux.train \
   --dataset "$DATASET" --config "$CONFIG" --device cuda \
   --batch_size "$BATCH" --accum_iter "$ACCUM" --num_workers 10 --epochs "$EPOCHS" \
   --use_initial "$USE_INITIAL" --noise_level "$NOISE_LEVEL" --use_ema --skewed_timesteps \

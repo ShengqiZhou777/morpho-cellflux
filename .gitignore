@@ -29,6 +29,13 @@ data/reports/*.json
 
 baselines/external/
 
+# AI assistant metadata
+.claude/
+wandb/
+
+# Temp comparison images
+main_comparison.png
+
 !data/raw/.gitkeep
 !data/processed/.gitkeep
 !data/reports/.gitkeep

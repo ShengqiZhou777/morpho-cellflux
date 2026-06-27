@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 
 from pytorch_lightning import Trainer
-from pytorch_lightning.callbacks import ModelCheckpoint
+from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint
 from pytorch_lightning.loggers import WandbLogger
 
 from adapter_common import load_config, repo_path
@@ -54,6 +54,7 @@ def train_impa(
         (run_dir / _sub).mkdir(parents=True, exist_ok=True)
 
     datamodule = CellDataLoader(args)
+    args.latent_dim = datamodule.latent_dim  # must match embedding file dimension
     solver = IMPAmodule(args, str(run_dir), datamodule)
     checkpoint = ModelCheckpoint(
         dirpath=run_dir / "hydra_checkpoints",
@@ -64,7 +65,7 @@ def train_impa(
     )
     logger = WandbLogger(save_dir=str(run_dir), offline=True, project=args.project, log_model=False)
     trainer_kwargs = {
-        "callbacks": [checkpoint],
+        "callbacks": [checkpoint, EarlyStopping(monitor="fid_transformations", patience=3, min_delta=0.001, mode="min")],
         "default_root_dir": str(run_dir),
         "logger": logger,
         "max_epochs": epochs,

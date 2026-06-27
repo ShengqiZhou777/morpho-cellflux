@@ -1,225 +1,211 @@
-# Morpho-CellFlux
+# PhenoFlux
 
-Research code for adapting CellFlux-style conditional flow matching to
-Perturb-Multi hepatocyte images.
+**Pluggable molecular priors for flow matching on cellular phenotype transport.**
 
-The core task is **marker phenotype transport**, not generic RGB image synthesis:
-given a control hepatocyte marker image and a target perturbation condition,
-generate a false-color marker panel whose population distribution moves toward
-the real perturbed population.
+Given a control cell image and a perturbation condition, PhenoFlux generates the
+perturbed cell phenotype. The model injects dataset-specific molecular priors —
+marker self-attention (MSA) and per-channel modulation (PCD) for Diet hepatocyte
+data, and program-conditioned gene embeddings (PCGE) for CRISPR perturbation data —
+into a shared flow matching UNet.
 
 ```text
-control marker image + perturbation condition -> generated perturbed marker image
+control cell image + perturbation condition → generated perturbed cell image
+         ↑                                              ↑
+    18ch MERFISH                                3ch false-color
+    marker profile                              marker panel
 ```
-
-The implementation vendors the CellFlux engine under `src/morphoflux/engine/`
-and adds Perturb-Multi data adapters, Diet/CRISPR configs, baseline adapters,
-and evaluation scripts.
-
-## Status
-
-This repository is the active research/code-release version. Large raw assets,
-checkpoints, generated images, and baseline outputs are intentionally not stored
-in git. They are reconstructed from the data builders and scripts documented
-below.
-
-Current scientific position:
-
-- Perturb-Multi images are multiplexed molecular readouts: protein markers of
-  subcellular structures/signaling pathways plus abundant RNAs.
-- FID/KID/MoA are reported for CellFlux-style comparability, but FID alone is
-  not a reliable biological success criterion on this dataset.
-- The primary biological evidence is marker-distribution movement from control
-  toward real treated cells.
-
-See [docs/SCIENTIFIC_STORY.md](docs/SCIENTIFIC_STORY.md) and
-[docs/EVAL_PROTOCOL.md](docs/EVAL_PROTOCOL.md) for the full framing.
 
 ## Benchmarks
 
-| benchmark | condition | control / treated | active panel |
-|---|---|---|---|
-| Diet | diet state one-hot | adlib -> fasted / hfd | `[9,5,8]` = Calreticulin / Perilipin / TOMM20 |
-| CRISPR paper core | target-gene identity one-hot, evaluated by original-paper programs | non-targeting -> gene perturbation | `[9,5,10]` = Calreticulin / Perilipin / pS6RP |
+| Dataset | Condition | Control → Treated | Image Panel |
+|---------|-----------|-------------------|-------------|
+| Diet | 3-dim diet one-hot | adlib → fasted / hfd | [9,5,8] = Calreticulin / Perilipin / TOMM20 |
+| CRISPR | 40-dim gene one-hot | non-targeting → gene KO | [9,5,10] = Calreticulin / Perilipin / pS6RP |
 
-The RGB PNGs produced by this repo are false-color renderings of selected marker
-channels. They are not natural-color microscopy images.
-
-## Repository Layout
-
-```text
-configs/                 Dataset/model configs.
-baselines/               PhenDiff, IMPA, StarGAN, and internal sanity-check adapters.
-data/raw/                Local symlinks to raw assets; gitignored.
-data/processed/          Derived indices/embeddings; gitignored except placeholders.
-data/reports/            Small report tables intended for paper summaries.
-docs/                    Public documentation map, architecture, evaluation protocol, story, results.
-scripts/                 Data build, train, eval, plotting, and launch scripts.
-src/morphoflux/          Data factory plus vendored CellFlux engine.
-outputs/                 Checkpoints, generated samples, logs, metrics; gitignored.
-```
+Images are false-color renderings of selected MERFISH marker channels.
 
 ## Installation
 
-The code is tested with Python 3.10 and PyTorch 2.x. Create an environment from
-the included file:
-
 ```bash
 conda env create -f environment.yml
-conda activate morpho-cellflux
+conda activate pmf
 pip install -e .
 ```
 
-If your cluster requires a specific CUDA/PyTorch build, install that PyTorch
-build first, then run `pip install -e .`.
+Python 3.10, PyTorch 2.x, CUDA 12.8. Tested on 2× RTX 5090 (32 GB each).
+
+## Quick Start
+
+```bash
+# Quick validation on mini subset (2 epochs, ~5 min)
+bash scripts/quick_validate.sh phenoflux_diet phenoflux
+
+# Full training on 5k subset
+torchrun --standalone --nproc_per_node=2 -m phenoflux.train \
+  --dataset phenoflux --config phenoflux_diet_msa_pcd --device cuda \
+  --batch_size 32 --epochs 20 --use_initial 1 --cfg_scale 0.2 \
+  --use_ema --skewed_timesteps --class_drop_prob 0.2 \
+  --eval_frequency 5 --fid_samples 5120 --compute_fid --save_fid_samples \
+  --data_index data/processed/diet/index_diet_5k.csv \
+  --output_dir outputs/runs/diet/msa_pcd_5k
+```
 
 ## Data Preparation
 
-Raw Perturb-Multi assets are not included. Download them (sources below) and
-place them under `data/raw/` in the self-contained, per-dataset layout the
-configs and build scripts read directly:
+Raw Perturb-Multi assets are not included. Download from
+[HuggingFace](https://huggingface.co/datasets/xingjiepan/PerturbMulti) and place
+under `data/raw/`:
 
 ```text
-data/raw/{crispr,diet}/   images/  manifest.parquet  rna.h5ad  protein.h5ad
-data/raw/metadata/        eval_panel.json  decision_table.csv
-data/raw/Perturb-multimodal.md
+data/raw/{crispr,diet}/   images/  manifest.parquet  rna.h5ad
 ```
 
-Public data sources:
-
-- Perturb-Multi paper: https://doi.org/10.1016/j.cell.2025.05.022
-- Cell images: https://huggingface.co/datasets/xingjiepan/PerturbMulti/tree/main
-
-This pipeline does not require the GEO raw sequencing release. It uses the
-paired image/protein/RNA assets from Perturb-Multi; the RNA h5ad is treated as a
-MERFISH readout for diagnostics, not as the main generative condition.
-
-The per-dataset asset layout is resolved by `RAW_ASSETS` in
-[src/morphoflux/data/factory.py](src/morphoflux/data/factory.py). The CRISPR
-data builder verifies the raw assets and writes derived tables:
+Build derived indices and embeddings:
 
 ```bash
-python scripts/materialize_data.py --config configs/crispr_hep.yaml
+# CRISPR (40 paper-core genes, 41×40 one-hot embedding)
 python scripts/build_crispr_paper_data.py
-```
 
-Build the Diet index and one-hot condition embedding:
-
-```bash
-python scripts/audit_diet_assets.py
+# Diet (335K cells, 3 conditions, 18ch MERFISH profiles)
 python scripts/build_diet_data.py
 ```
 
-The engine reads three runtime artifacts from each config:
+Each config YAML points to three runtime artifacts:
 
-```text
-image_path        raw npz crop directory
-data_index_path   engine index CSV
-embedding_path    condition embedding CSV
+```yaml
+image_path:        data/raw/diet/images
+data_index_path:   data/processed/diet/index_diet.csv
+embedding_path:    data/processed/diet/embedding_diet.csv
 ```
+
+Switch data size without duplicating configs:
+
+```bash
+--data_index data/processed/diet/index_diet_mini.csv   # fast dev (300 cells)
+--data_index data/processed/diet/index_diet_5k.csv     # ablation (5k)
+--data_index data/processed/diet/index_diet.csv        # paper (full, default)
+```
+
+## Experiment Configs (6)
+
+All use `--dataset phenoflux`. The `condition_dim` is auto-computed from YAML flags.
+
+| Config | Molecular Prior | `condition_dim` |
+|--------|----------------|:---:|
+| `phenoflux_diet` | none (baseline) | 3 |
+| `phenoflux_diet_18ch` | naive 18ch concat | 21 |
+| `phenoflux_diet_msa` | MSA | 67 |
+| `phenoflux_diet_msa_pcd` | MSA + PCD | 67 |
+| `phenoflux_crispr` | none (baseline) | 40 |
+| `phenoflux_crispr_pcge` | PCGE | 40 |
 
 ## Training
 
-Training uses `torchrun` through [scripts/train.sh](scripts/train.sh). The script
-is controlled by environment variables and assumes the project environment is
-already active.
-
-Diet:
-
 ```bash
-OUT=outputs/runs/diet/main \
-CONFIG=diet_id DATASET=diet_id \
-EPOCHS=12 EVAL_FREQ=2 FID_SAMPLES=5120 \
-NPROC=2 BATCH=16 USE_INITIAL=1 CFG=0.2 \
-bash scripts/train.sh
+# Diet (all configs)
+torchrun --standalone --nproc_per_node=2 -m phenoflux.train \
+  --dataset phenoflux --config phenoflux_diet_msa_pcd --device cuda \
+  --batch_size 32 --epochs 20 --use_initial 1 --cfg_scale 0.2 \
+  --use_ema --skewed_timesteps --class_drop_prob 0.2 \
+  --eval_frequency 5 --fid_samples 5120 --compute_fid --save_fid_samples \
+  --output_dir outputs/runs/diet/msa_pcd
+
+# CRISPR
+torchrun --standalone --nproc_per_node=2 -m phenoflux.train \
+  --dataset phenoflux --config phenoflux_crispr_pcge --device cuda \
+  --batch_size 32 --epochs 40 --use_initial 1 --cfg_scale 0.2 \
+  --use_ema --skewed_timesteps --class_drop_prob 0.2 \
+  --eval_frequency 10 --fid_samples 5120 --compute_fid --save_fid_samples \
+  --output_dir outputs/runs/crispr/pcge
 ```
 
-CRISPR:
+Or use the convenience launcher:
 
 ```bash
-OUT=outputs/runs/crispr/paper_core \
-CONFIG=crispr_paper_core DATASET=perturbmulti_id \
-EPOCHS=20 EVAL_FREQ=5 FID_SAMPLES=5120 \
-NPROC=2 BATCH=16 USE_INITIAL=1 CFG=0.2 \
-bash scripts/train.sh
+CONFIG=phenoflux_diet_msa_pcd OUT=outputs/runs/diet/msa_pcd \
+  EPOCHS=20 EVAL_FREQ=5 FID_SAMPLES=5120 NPROC=2 \
+  bash scripts/train.sh
 ```
 
-Quick smoke test:
-
-```bash
-make smoke
-```
+Checkpoints saved every epoch. Resume: `--resume <checkpoint.pth> --eval_only`.
 
 ## Evaluation
 
-Aggregate marker-distribution and direction metrics:
+All metrics in `phenoflux/eval/`:
 
 ```bash
-python scripts/aggregate_eval.py outputs/runs/diet/main 5 9
-python scripts/aggregate_eval.py outputs/runs/crispr/paper_core 5 19
+# Image quality — FIDo/c, KIDo/c (matched-N)
+python phenoflux/eval/fid.py \
+  --real-dir <real_imgs> --gen-dir <fid_samples/epoch-N> \
+  --per-condition-cap 500
+
+# Biological metrics — gap_closed, dir-corr, sign-agreement, Pearson
+python phenoflux/eval/aggregate.py <run_dir> 5 <epoch>
+
+# MoA classifier accuracy
+python phenoflux/eval/moa.py \
+  --config_path configs/phenoflux_crispr.yaml --mode eval \
+  --img_root_path <run_dir>/fid_samples/epoch-<N> \
+  --ckpt_path outputs/baselines/moa/crispr/condition_classifier.pth \
+  --out_json <run_dir>/moa.json
+
+# Marker distribution figures
+python phenoflux/eval/figures.py \
+  --run-dir <run_dir> --epoch <N> --out-dir outputs/figures
 ```
 
-Diet marker distribution figure:
+### Metrics Summary
 
-```bash
-python scripts/diet_marker_distribution_figure.py \
-  --run-dir outputs/runs/diet/fid5k \
-  --epoch 12 \
-  --out-dir outputs/figures/diet \
-  --prefix diet_fid5k
-```
+| Metric | Script | What it measures |
+|--------|--------|-----------------|
+| FIDo / FIDc | `eval/fid.py` | Image quality (pooled / per-condition) |
+| KIDo / KIDc | `eval/fid.py` | Image quality (unbiased) |
+| gap_closed | `eval/aggregate.py` | `1 − W(gen,tgt) / W(src,tgt)` |
+| dir-corr | `eval/aggregate.py` | Direction consistency of perturbation effect |
+| sign-agreement | `eval/aggregate.py` | Sign match of delta direction |
+| MoA accuracy | `eval/moa.py` | Condition classification from generated images |
 
-CellFlux-style method comparison tables use the matched-N tooling under
-`baselines/`:
+## Baselines
+
+Adapters for IMPA, PhenDiff, StarGAN, and MorphoDiff in `baselines/`.
+External method code in `baselines/external/`.
 
 ```bash
 bash baselines/export_all_baseline_data.sh
 bash baselines/run_paper_baselines.sh
-python baselines/collect_paper_metrics.py
+python baselines/compare.py
 ```
 
-See [baselines/README.md](baselines/README.md) for external baseline setup and
-[docs/EVAL_PROTOCOL.md](docs/EVAL_PROTOCOL.md) for metric definitions.
+## Repository Layout
 
-## Current Result Snapshot
-
-The current Diet 5K comparison shows why FID is not sufficient here:
-
-| method | FIDo | FIDc | KIDo | KIDc | MoA-Acc |
-|---|---:|---:|---:|---:|---:|
-| PhenDiff | 10.92 | 13.97 | 0.0066 | 0.0075 | 60.69 |
-| IMPA | 52.29 | 55.43 | 0.0407 | 0.0424 | **63.97** |
-| Morpho-CellFlux | 31.26 | 35.43 | 0.0267 | 0.0291 | 54.93 |
-
-An internal no-transport sanity check can score well on FID/KID because
-same-batch control images are realistic. For the paper table, we keep named
-generation baselines separate from that check. The proposed model's positive
-signal is the marker-distribution shift, especially HFD Calreticulin/Perilipin
-moving close to the treated population.
-
-The compact public result snapshot is in [docs/RESULTS.md](docs/RESULTS.md).
-
-## Reproducibility Notes
-
-- Raw data, checkpoints, generated PNGs, and baseline outputs are gitignored.
-- The DDP eval loop gathers `trt2ctrl_idx.json` mappings across ranks before
-  writing, so future multi-GPU evals preserve complete treated->control metadata.
-- Older 5K Diet outputs generated before that fix have 5120 PNGs but only 2560
-  paired control mappings; gen-vs-target distributions remain valid, paired
-  control gap-closure should be rerun for final figures.
-
-Detailed reproduction steps are in
-[docs/REPRODUCING.md](docs/REPRODUCING.md).
+```
+phenoflux/                   # Python package
+├── train.py                 # Entry point (torchrun -m phenoflux.train)
+├── models/                  # UNetModel, MSA, PCD, PCGE, EMA
+├── training/                # Loops, dataloader, DDP, checkpoint
+└── eval/                    # FID, aggregate, MoA, figures
+configs/                     # 6 paper experiment YAMLs
+scripts/                     # Data build, train launch, quick validate
+baselines/                   # External method adapters
+docs/                        # ARCHITECTURE, EVAL_PROTOCOL, REPRODUCING
+outputs/                     # Training outputs (gitignored)
+data/                        # Raw + processed (gitignored)
+```
 
 ## Citation
 
-If you use this code, please cite the accompanying Morpho-CellFlux paper when it
-is released and cite CellFlux for the vendored flow-matching engine. A provisional
-repository citation is provided in [CITATION.cff](CITATION.cff).
+If you use this code, please cite the PhenoFlux paper (forthcoming) and CellFlux
+for the flow matching engine:
 
-## License and Upstream Attribution
+```bibtex
+@article{zhang2025cellflux,
+  title={CellFlux: Simulating Cellular Morphology Changes via Flow Matching},
+  author={Zhang, Yuhui and Su, Yuchang and Wang, Chenyu and others},
+  journal={arXiv preprint arXiv:2502.09775},
+  year={2025}
+}
+```
 
-This repository is released under the MIT License. The vendored CellFlux engine
-is included with its upstream MIT license in
-[src/morphoflux/engine/LICENSE](src/morphoflux/engine/LICENSE); adaptation notes
-are in [src/morphoflux/engine/UPSTREAM.md](src/morphoflux/engine/UPSTREAM.md).
+## License
+
+MIT. The codebase is adapted from the CellFlux engine (also MIT).
