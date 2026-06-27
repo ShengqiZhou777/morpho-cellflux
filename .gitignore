@@ -39,3 +39,8 @@ main_comparison.png
 !data/raw/.gitkeep
 !data/processed/.gitkeep
 !data/reports/.gitkeep
+.arbor/
+.autoresearch/
+.coordinator/
+results/
+cache_old_*/
