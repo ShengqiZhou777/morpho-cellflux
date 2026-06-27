@@ -1,0 +1,31 @@
+# Arbor research config for PhenoFlux CFG optimization
+task: >
+  Optimize CFG scale and class_drop_prob for phenoflux_diet_msa_pcd to maximize
+  gap_closed. Baseline already measured: avg gap_closed=-3.23, FID=78.2
+  (cfg_scale=0.2, class_drop_prob=0.2, batch_size=2, 2 epochs, fid_samples=64).
+  Search space: cfg_scale in [0.1, 0.5], class_drop_prob in [0.0, 0.4].
+  DO NOT re-run baseline — start from IDEATE phase.
+
+coordinator:
+  max_cycles: 2
+  ui:
+    interaction_mode: auto
+
+eval:
+  metric: gap_closed
+  direction: maximize
+  dev_command: >
+    bash /home/shockley/myproject/PhenoFlux/morpho-cellflux/.arbor/sessions/cfg_optimization_20260627/run_experiment.sh
+    {node_id} {cfg_scale} {class_drop_prob}
+  dev_timeout: 1200
+  baseline_score: -3.23
+
+constraints:
+  gpu: single RTX 4090
+  batch_size: 2
+  epochs: 2
+  fid_samples: 64
+  conda_env: /data/conda_envs/pmf
+  conda_setup: . /home/shockley/miniconda3/etc/profile.d/conda.sh && conda activate /data/conda_envs/pmf
+  env:
+    PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
