@@ -40,7 +40,10 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from scipy.stats import pearsonr, spearmanr, wasserstein_distance, energy_distance
 
-REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# aggregate.py lives at phenoflux/eval/aggregate.py, so three dirname() hops are
+# needed to reach the repo root (eval -> phenoflux -> repo). Two hops stops at the
+# phenoflux package and makes relative IMG/data paths resolve wrong.
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 # Default image dir; overridden per-run from the run's args.json image_path in main()
 # so eval reads the SAME npz cells the run trained on (e.g. diet vs CRISPR).
 IMG = os.path.join(REPO_ROOT, "data/raw/crispr/images")
