@@ -26,7 +26,7 @@ Report all metrics, but keep their roles separate.
 | Image quality | KIDo | overall KID | lower better | FID robustness check |
 | Image quality | KIDc | conditional KID | lower better | class-balanced KID |
 | Condition separability | MoA Acc / Macro-F1 / Weighted-F1 | classifier trained on real perturbed images, evaluated on generated images | higher better | auxiliary biological proxy; CRISPR reports program-level labels |
-| Marker phenotype | gap_closed | `1 − W(gen,tgt) / W(ctrl,tgt)` on per-cell marker foreground means | higher better | primary Diet biological metric |
+| Marker phenotype | PGC | `1 − W(gen,tgt) / W(ctrl,tgt)` on per-cell marker foreground means | higher better | primary Diet biological metric |
 | Marker phenotype | dir_corr / sign_agree | recovery of `(gen−ctrl)` vs `(real−ctrl)` perturbation direction across genes | higher better | primary CRISPR biological metric |
 
 FID/KID use Inception features on rendered 3-channel PNGs. Those PNGs are
@@ -94,7 +94,7 @@ methods inside the same table.
 | Perturbation | physiological state | target gene |
 | Control | adlib | non-targeting/control sgRNA |
 | Treated classes | fasted, hfd | 40 target genes grouped into 7 original-paper programs |
-| Active panel | `[9,5,8]` Calreticulin / Perilipin / TOMM20 | `[9,5,10]` Calreticulin / Perilipin / pS6RP |
+| Active panel | `[9,5,10]` Calreticulin / Perilipin / pS6RP | `[9,5,10]` Calreticulin / Perilipin / pS6RP |
 | Main biological metric | per-condition marker gap closure | direction recovery and pooled marker gap closure |
 
 Diet is the strong physiological demonstration. CRISPR is the clean gene-identity
@@ -128,7 +128,7 @@ For every generated PNG:
 ```
 W_gen  = Wasserstein(generated_marker_means, target_marker_means)
 W_ctrl = Wasserstein(control_marker_means, target_marker_means)
-gap_closed = 1 − W_gen / W_ctrl
+PGC = 1 − W_gen / W_ctrl
 ```
 
 Interpretation:
@@ -187,7 +187,7 @@ gathers mappings across ranks before the main process writes the JSON.
 For outputs produced before this fix:
 
 - gen-vs-target distribution metrics remain usable for all generated images;
-- paired control/gap_closed metrics must disclose the mapped-row count;
+- paired control/PGC metrics must disclose the mapped-row count;
 - rerun eval after the DDP fix for fully rigorous paired gap closure.
 
 ## 9. Implementation Status

@@ -93,7 +93,6 @@ run_experiment_crispr() {
 
 run_experiment_crispr "perturbmulti_id"     "perturbmulti_id"     "perturbmulti_id"
 run_experiment_crispr "perturbmulti_idsig"  "perturbmulti_idsig"  "perturbmulti_idsig"
-run_experiment_crispr "perturbmulti_pcge"   "perturbmulti_pcge"   "perturbmulti_pcge"
 
 echo ""
 echo "=== All experiments launched ==="

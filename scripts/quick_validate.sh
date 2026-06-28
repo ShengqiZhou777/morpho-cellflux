@@ -127,12 +127,12 @@ if [[ -f "$OUT_DIR/aggregate_eval_summary.json" ]]; then
 import json
 with open('$OUT_DIR/aggregate_eval_summary.json') as f:
     data = json.load(f)
-# Print channel-level gap_closed
+# Print channel-level PGC
 if 'by_channel' in data:
     for ch, metrics in data['by_channel'].items():
-        gc = metrics.get('gap_closed', {})
+        gc = metrics.get('pgc', {})
         for cond, val in gc.items():
-            print(f'  gap_closed[{ch}][{cond}] = {val:.4f}')
+            print(f'  PGC[{ch}][{cond}] = {val:.4f}')
 elif isinstance(data, list):
     for item in data:
         print(f'  {item}')
@@ -142,8 +142,8 @@ else:
 fi
 
 echo ""
-if grep -q "gap_closed" "$OUT_DIR/aggregate_eval.log" 2>/dev/null; then
-    echo "Quick validation PASSED: gap_closed computed successfully."
+if grep -q "pgc" "$OUT_DIR/aggregate_eval.log" 2>/dev/null; then
+    echo "Quick validation PASSED: PGC computed successfully."
 else
     echo "Quick validation COMPLETE. See $OUT_DIR/ for results."
 fi

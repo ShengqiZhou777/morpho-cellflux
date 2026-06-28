@@ -25,7 +25,7 @@ raw assets (data/raw/)                       h5ad (RNA/protein) + manifest
                                v
           evaluation (phenoflux/eval/, reads fid_samples)
           - phenoflux/eval/fid.py       : FIDo/c, KIDo/c with matched-N
-          - phenoflux/eval/aggregate.py : gap_closed, dir-corr, sign-agreement
+          - phenoflux/eval/aggregate.py : PGC (Phenotypic Gap Closure), dir-corr, sign-agreement
           - phenoflux/eval/moa.py       : MoA classifier accuracy
           - phenoflux/eval/figures.py   : marker distribution KDE + bar charts
 ```
@@ -35,7 +35,7 @@ raw assets (data/raw/)                       h5ad (RNA/protein) + manifest
 - `phenoflux/` — main Python package. Entry: `torchrun -m phenoflux.train`.
   - `phenoflux/train.py` — entry point, DDP init, main training loop
   - `phenoflux/args.py` — argument parser
-  - `phenoflux/models/` — UNetModel, MSA, PCD, PCGE, EMA, NN utils
+  - `phenoflux/models/` — UNetModel, MSA, PCD, EMA, NN utils
   - `phenoflux/training/` — training/eval loops, dataloader, DDP, checkpoint
   - `phenoflux/eval/` — FID/KID, aggregate metrics, MoA classifier, figures
 - `configs/` — 8 paper experiment YAMLs (single source of truth)
@@ -56,8 +56,6 @@ Condition (one-hot) │ base_condition_dim      │  3 (diet) / 40 (crispr)
 Marker prior        │ use_msa / use_pcd       │  MSA → PCD (cross-dataset)
                     │ use_marker_profile      │  Info control: naive 18ch concat
                     ├─────────────────────────┤
-CRISPR prior        │ use_pcge                │  Program-Conditioned Gene Embedding
-                    ├─────────────────────────┤
 condition_dim       │ auto-computed           │  base + 64 (MSA) or +18 (naive)
                     └─────────────────────────┘
 ```
@@ -77,21 +75,13 @@ condition_dim       │ auto-computed           │  base + 64 (MSA) or +18 (nai
   at different magnitudes to the same perturbation
 - ~2.4K parameters, per-channel only (no spatial dimensions)
 
-### PCGE (Program-Conditioned Gene Embedding) — CRISPR
-
-- Replaces flat 40-dim one-hot lookup with hierarchical K=7 program embedding
-- gene_index → 256-dim gene embedding → cross-attention over K=7 program prototypes
-  → gated fusion (gene-specific vs. program-shared) → projection to 40-dim output
-- Drop-in compatible with the original nn.Embedding interface
-- 40 genes organized into 7 functional programs per Perturb-Multi main text/figure programs
-
 ### Info Control
 
 - `use_marker_profile` flag: naive 18ch mean-pool + concat (no learned attention)
 - Same input information as MSA, but no architecture to consume it
 - Answers: does MSA matter, or just having the extra 18ch info?
 
-## Paper Configs (8)
+## Paper Configs (7)
 
 All use `--dataset phenoflux`. `condition_dim` is auto-computed from YAML flags.
 
@@ -102,9 +92,8 @@ All use `--dataset phenoflux`. `condition_dim` is auto-computed from YAML flags.
 | `phenoflux_diet_msa` | Diet | MSA | 67 | Learned attention > naive |
 | `phenoflux_diet_msa_pcd` | Diet | MSA+PCD | 67 | Per-channel modulation adds gain |
 | `phenoflux_crispr` | CRISPR | none | 40 | Flow matching baseline |
-| `phenoflux_crispr_msa_pcd` | CRISPR | MSA+PCD | 67 | Marker prior generalizes across datasets |
-| `phenoflux_crispr_pcge` | CRISPR | PCGE | 40 | Program embedding helps |
-| `phenoflux_crispr_pcge_msa_pcd` | CRISPR | PCGE+MSA+PCD | 67 | Both priors composable and complementary |
+| `phenoflux_crispr_msa` | CRISPR | MSA | 104 | Marker prior generalizes across datasets |
+| `phenoflux_crispr_msa_pcd` | CRISPR | MSA+PCD | 104 | Per-channel modulation generalizes too |
 
 Data size controlled via `--data_index` CLI (not separate configs):
 ```bash
@@ -145,7 +134,7 @@ All metrics in `phenoflux/eval/`:
 # Image quality — FIDo/c, KIDo/c (matched-N)
 python phenoflux/eval/fid.py --real-dir <real_imgs> --gen-dir <fid_samples/epoch-N> --per-condition-cap 500
 
-# Biological metrics — gap_closed, dir-corr, sign-agreement
+# Biological metrics — PGC (Phenotypic Gap Closure), dir-corr, sign-agreement
 python phenoflux/eval/aggregate.py <eval_dir> 5 <epoch>
 
 # MoA classifier accuracy
@@ -165,7 +154,7 @@ python phenoflux/eval/figures.py --run-dir <run_dir> --epoch <N> --out-dir outpu
 | Image quality | FIDo/FIDc | overall/conditional FID | CellFlux-style image realism |
 | Image quality | KIDo/KIDc | overall/conditional KID | FID robustness check |
 | Condition separability | MoA Acc/F1 | classifier on generated images | Auxiliary biological proxy |
-| Marker phenotype | gap_closed | `1 − W₁(gen,tgt)/W₁(ctrl,tgt)` | Primary Diet biological metric |
+| Marker phenotype | PGC | `1 − W₁(gen,tgt)/W₁(ctrl,tgt)` | Primary Diet biological metric |
 | Marker phenotype | dir_corr / sign_agree | per-gene perturbation direction recovery | Primary CRISPR biological metric |
 
 ## Dataset Mapping
@@ -175,7 +164,7 @@ python phenoflux/eval/figures.py --run-dir <run_dir> --epoch <N> --out-dir outpu
 | Perturbation | physiological state (adlib/fasted/hfd) | target gene identity |
 | Control | adlib | non-targeting control sgRNA |
 | Treated classes | fasted, hfd | 40 genes in 7 functional programs |
-| Active panel | `[9,5,8]` Calreticulin / Perilipin / TOMM20 | `[9,5,10]` Calreticulin / Perilipin / pS6RP |
+| Active panel | `[9,5,10]` Calreticulin / Perilipin / pS6RP | `[9,5,10]` Calreticulin / Perilipin / pS6RP |
 
 ## Modality Semantics
 

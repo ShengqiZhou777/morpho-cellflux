@@ -30,6 +30,7 @@ FOREGROUND_LOSS=${FOREGROUND_LOSS:-0}
 FOREGROUND_THRESHOLD=${FOREGROUND_THRESHOLD:-0.05}
 FOREGROUND_WEIGHT=${FOREGROUND_WEIGHT:-5.0}
 BACKGROUND_WEIGHT=${BACKGROUND_WEIGHT:-0.1}
+EARLY_STOP=${EARLY_STOP:-5}   # stop if loss doesn't improve for N epochs. 0 = disabled.
 TEST_RUN=${TEST_RUN:-0}
 
 EXTRA_ARGS=()
@@ -55,4 +56,5 @@ PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \
   --class_drop_prob 0.2 --cfg_scale "$CFG" \
   --eval_frequency "$EVAL_FREQ" --compute_fid --fid_samples "$FID_SAMPLES" \
   --ode_options "$ODE_OPTIONS" --save_fid_samples \
+  --early_stop_patience "$EARLY_STOP" \
   --output_dir "$OUT" "${EXTRA_ARGS[@]}" 2>&1 | tee -a "$OUT/train_stdout.log"

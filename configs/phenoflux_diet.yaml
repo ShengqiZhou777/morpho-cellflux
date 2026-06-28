@@ -1,7 +1,7 @@
 # Diet hepatocytes — baseline UNet.
 # Condition = diet state (adlib / fasted / hfd), 3-dim one-hot.
 # No molecular prior.  No marker profile.
-# Image panel: channels [9,5,8] = Calreticulin / Perilipin / TOMM20.
+# Image panel: channels [9,5,10] = Calreticulin / Perilipin / pS6RP.
 task_name: diet_id
 ood_set: null
 mol_list: null
@@ -9,7 +9,7 @@ trainable_emb: false
 dataset_name: perturbmulti
 dataset: phenoflux
 n_channels: 3
-channels: [9, 5, 8]
+channels: [9, 5, 10]
 multimodal: false
 batch_correction: false
 batch_key: null

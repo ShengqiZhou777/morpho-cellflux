@@ -3,10 +3,10 @@
 **Pluggable molecular priors for flow matching on cellular phenotype transport.**
 
 Given a control cell image and a perturbation condition, PhenoFlux generates the
-perturbed cell phenotype. The model injects dataset-specific molecular priors —
-marker self-attention (MSA) and per-channel modulation (PCD) for Diet hepatocyte
-data, and program-conditioned gene embeddings (PCGE) for CRISPR perturbation data —
-into a shared flow matching UNet.
+perturbed cell phenotype. The model injects two dataset-agnostic molecular priors —
+marker self-attention (MSA) and per-channel modulation (PCD) — into a shared flow
+matching UNet. The same module pair is applied to both Diet hepatocyte and CRISPR
+perturbation data.
 
 ```text
 control cell image + perturbation condition → generated perturbed cell image
@@ -19,8 +19,11 @@ control cell image + perturbation condition → generated perturbed cell image
 
 | Dataset | Condition | Control → Treated | Image Panel |
 |---------|-----------|-------------------|-------------|
-| Diet | 3-dim diet one-hot | adlib → fasted / hfd | [9,5,8] = Calreticulin / Perilipin / TOMM20 |
+| Diet | 3-dim diet one-hot | adlib → fasted / hfd | [9,5,10] = Calreticulin / Perilipin / pS6RP |
 | CRISPR | 40-dim gene one-hot | non-targeting → gene KO | [9,5,10] = Calreticulin / Perilipin / pS6RP |
+
+Diet and CRISPR use the identical 3-channel panel (Calreticulin / Perilipin / pS6RP),
+so biological readouts are directly comparable across both datasets.
 
 Images are false-color renderings of selected MERFISH marker channels.
 
@@ -97,7 +100,8 @@ All use `--dataset phenoflux`. The `condition_dim` is auto-computed from YAML fl
 | `phenoflux_diet_msa` | MSA | 67 |
 | `phenoflux_diet_msa_pcd` | MSA + PCD | 67 |
 | `phenoflux_crispr` | none (baseline) | 40 |
-| `phenoflux_crispr_pcge` | PCGE | 40 |
+| `phenoflux_crispr_msa` | MSA | 104 |
+| `phenoflux_crispr_msa_pcd` | MSA + PCD | 104 |
 
 ## Training
 
@@ -112,11 +116,11 @@ torchrun --standalone --nproc_per_node=2 -m phenoflux.train \
 
 # CRISPR
 torchrun --standalone --nproc_per_node=2 -m phenoflux.train \
-  --dataset phenoflux --config phenoflux_crispr_pcge --device cuda \
+  --dataset phenoflux --config phenoflux_crispr_msa_pcd --device cuda \
   --batch_size 32 --epochs 40 --use_initial 1 --cfg_scale 0.2 \
   --use_ema --skewed_timesteps --class_drop_prob 0.2 \
   --eval_frequency 10 --fid_samples 5120 --compute_fid --save_fid_samples \
-  --output_dir outputs/runs/crispr/pcge
+  --output_dir outputs/runs/crispr/msa_pcd
 ```
 
 Or use the convenience launcher:
@@ -139,7 +143,7 @@ python phenoflux/eval/fid.py \
   --real-dir <real_imgs> --gen-dir <fid_samples/epoch-N> \
   --per-condition-cap 500
 
-# Biological metrics — gap_closed, dir-corr, sign-agreement, Pearson
+# Biological metrics — PGC (Phenotypic Gap Closure), dir-corr, sign-agreement, Pearson
 python phenoflux/eval/aggregate.py <run_dir> 5 <epoch>
 
 # MoA classifier accuracy
@@ -160,7 +164,7 @@ python phenoflux/eval/figures.py \
 |--------|--------|-----------------|
 | FIDo / FIDc | `eval/fid.py` | Image quality (pooled / per-condition) |
 | KIDo / KIDc | `eval/fid.py` | Image quality (unbiased) |
-| gap_closed | `eval/aggregate.py` | `1 − W(gen,tgt) / W(src,tgt)` |
+| PGC | `eval/aggregate.py` | `1 − W(gen,tgt) / W(src,tgt)` — Phenotypic Gap Closure |
 | dir-corr | `eval/aggregate.py` | Direction consistency of perturbation effect |
 | sign-agreement | `eval/aggregate.py` | Sign match of delta direction |
 | MoA accuracy | `eval/moa.py` | Condition classification from generated images |
@@ -181,7 +185,7 @@ python baselines/compare.py
 ```
 phenoflux/                   # Python package
 ├── train.py                 # Entry point (torchrun -m phenoflux.train)
-├── models/                  # UNetModel, MSA, PCD, PCGE, EMA
+├── models/                  # UNetModel, MSA, PCD, EMA
 ├── training/                # Loops, dataloader, DDP, checkpoint
 └── eval/                    # FID, aggregate, MoA, figures
 configs/                     # 6 paper experiment YAMLs

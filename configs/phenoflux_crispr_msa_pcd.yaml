@@ -1,8 +1,9 @@
-# Diet hepatocytes — MSA + PCD (full PhenoFlux Diet).
-# MSA: Marker Self-Attention learns cross-marker co-regulation.
+# CRISPR perturbmulti — MSA + PCD (full PhenoFlux molecular prior).
+# MSA: Marker Self-Attention learns cross-marker co-regulation from 18ch profiles.
 # PCD: Per-Channel Decoder applies per-channel (scale,bias) modulation
 #      on the 3ch output from MSA context.
-task_name: diet_id
+# Total condition_dim = 40 + 64 = 104.
+task_name: crispr_paper_core
 ood_set: null
 mol_list: null
 trainable_emb: false
@@ -18,13 +19,13 @@ add_controls: false
 condition_embedding_dimension: null
 modality_list:
   - Gene
-image_path: data/raw/diet/images
-data_index_path: data/processed/diet/index_diet.csv
-embedding_path: data/processed/diet/embedding_diet.csv
+image_path: data/raw/crispr/images
+data_index_path: data/processed/crispr/index_paper_40.csv
+embedding_path: data/processed/crispr/embedding_paper_40.csv
 use_marker_profile: true
-augment_train: true
+augment_train: false
 normalize: false
 # PhenoFlux molecular prior
-base_condition_dim: 3
+base_condition_dim: 40
 use_msa: true
 use_pcd: true

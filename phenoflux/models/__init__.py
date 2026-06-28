@@ -1,4 +1,4 @@
-"""PhenoFlux model modules — UNet backbone, MSA/PCD conditioning, PCGE."""
+"""PhenoFlux model modules — UNet backbone, MSA/PCD conditioning."""
 
 from phenoflux.models.unet import UNetModel
 from phenoflux.models.discrete_unet import DiscreteUNetModel
@@ -10,10 +10,6 @@ from phenoflux.models.msa import (
 )
 from phenoflux.models.pcd import (
     PerChannelDecoder,
-)
-from phenoflux.models.pcge import (
-    GeneProgramEncoder,
-    build_gene_to_program_mapping,
 )
 from phenoflux.models.configs import (
     MODEL_CONFIGS,
@@ -28,8 +24,6 @@ __all__ = [
     "MarkerSelfAttention",
     "create_msa_module",
     "PerChannelDecoder",
-    "GeneProgramEncoder",
-    "build_gene_to_program_mapping",
     "MODEL_CONFIGS",
     "instantiate_model",
 ]

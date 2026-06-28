@@ -22,6 +22,7 @@ dependencies = [
   "matplotlib",
   "pillow",
   "tqdm",
+  "wandb",
 ]
 
 [project.optional-dependencies]

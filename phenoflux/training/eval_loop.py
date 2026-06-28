@@ -128,6 +128,20 @@ def eval_model(
     _model = model.module if hasattr(model, 'module') else model
     _model = getattr(_model, 'model', _model)  # unwrap EMA if present
 
+    # Eval uses less GPU memory (no gradients/optimizer), so we can use a larger
+    # batch size than training to speed up FID image generation.
+    eval_bs = getattr(args, 'eval_batch_size', 0) or args.batch_size
+    if eval_bs != args.batch_size:
+        logger.info(f"Eval batch_size: {eval_bs} (train was {args.batch_size})")
+        data_loader = torch.utils.data.DataLoader(
+            datamodule.test_set,
+            batch_size=eval_bs,
+            shuffle=True,  # shuffle so fid_samples span all conditions, not just the first alphabetically
+            num_workers=args.num_workers,
+            pin_memory=args.pin_mem,
+            drop_last=False,
+        )
+
     cfg_scaled_model = CFGScaledModel(model=model)
     cfg_scaled_model.train(False)
 
@@ -270,13 +284,24 @@ def eval_model(
             fid_metric.update(synthetic_samples, real=False)
             num_synthetic += synthetic_samples.shape[0]
             if not snapshots_saved and args.output_dir:
+                snapshot_path = (
+                    Path(args.output_dir)
+                    / "snapshots"
+                    / f"{epoch}_{data_iter_step}.png"
+                )
                 save_image(
                     synthetic_samples,
-                    fp=Path(args.output_dir)
-                    / "snapshots"
-                    / f"{epoch}_{data_iter_step}.png",
+                    fp=snapshot_path,
                 )
                 snapshots_saved = True
+                # wandb snapshot logging
+                if getattr(args, 'wandb_project', None):
+                    if is_main_process():
+                        import wandb
+                        wandb.log({
+                            "eval/snapshots": wandb.Image(str(snapshot_path)),
+                            "eval/epoch": epoch,
+                        })
             target_class_labels = y_trg.cpu().numpy()
             img_file_ctrl, img_file_trt = batch['file_names']
             if args.save_fid_samples and args.output_dir:

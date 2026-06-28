@@ -95,14 +95,11 @@ torchrun --standalone --nproc_per_node=2 -m phenoflux.train \
   --data_index data/processed/crispr/index_paper_40.csv \
   --output_dir outputs/runs/crispr/baseline
 
+# + MSA (only)
+torchrun ... --config phenoflux_crispr_msa --output_dir outputs/runs/crispr/msa
+
 # + MSA + PCD
 torchrun ... --config phenoflux_crispr_msa_pcd --output_dir outputs/runs/crispr/msa_pcd
-
-# + PCGE
-torchrun ... --config phenoflux_crispr_pcge --output_dir outputs/runs/crispr/pcge
-
-# + PCGE + MSA + PCD
-torchrun ... --config phenoflux_crispr_pcge_msa_pcd --output_dir outputs/runs/crispr/pcge_msa_pcd
 ```
 
 ### Convenience launcher
@@ -128,7 +125,7 @@ python phenoflux/eval/fid.py \
   --real-dir <real_imgs> --gen-dir <gen_imgs> --per-condition-cap 500
 ```
 
-### Biological metrics (gap_closed, dir-corr, sign-agreement)
+### Biological metrics (PGC, dir-corr, sign-agreement)
 
 ```bash
 python phenoflux/eval/aggregate.py <eval_dir> 5 <epoch>

@@ -90,17 +90,56 @@ def get_args_parser():
         default="./output_dir",
         help="path where to save, empty for no saving",
     )
+    # wandb logging (optional — only enabled when --wandb_project is set)
+    parser.add_argument(
+        "--wandb_project",
+        type=str,
+        default=None,
+        help="wandb project name; enables wandb logging when set",
+    )
+    parser.add_argument(
+        "--wandb_entity",
+        type=str,
+        default=None,
+        help="wandb entity/team name",
+    )
+    parser.add_argument(
+        "--wandb_run_name",
+        type=str,
+        default=None,
+        help="wandb run name; defaults to output_dir basename",
+    )
+    parser.add_argument(
+        "--wandb_tags",
+        nargs="+",
+        type=str,
+        default=None,
+        help="wandb tags for the run",
+    )
+    parser.add_argument(
+        "--wandb_log_freq",
+        type=int,
+        default=50,
+        help="Frequency (in steps) for wandb logging within an epoch",
+    )
+    parser.add_argument(
+        "--eval_batch_size",
+        type=int,
+        default=0,
+        help="Batch size for eval image generation (0 = use training batch_size). "
+             "Eval uses less GPU memory (no gradients), so a larger value speeds up FID generation.",
+    )
     parser.add_argument(
         "--ode_method",
-        default="midpoint",
+        default="dopri5",
         choices=list(SOLVERS.keys()) + ["edm_heun"],
-        help="ODE solver used to generate samples.",
+        help="ODE solver used to generate samples. dopri5 is adaptive 5th-order (recommended, ~44 NFE).",
     )
     parser.add_argument(
         "--ode_options",
-        default='{"step_size": 0.01}',
+        default='{"atol": 1e-5, "rtol": 1e-5}',
         type=json.loads,
-        help="ODE solver options. Eg. the midpoint solver requires step-size, dopri5 has no options to set.",
+        help="ODE solver options. dopri5 uses atol/rtol; midpoint uses step_size.",
     )
     parser.add_argument(
         "--sym",
@@ -133,9 +172,10 @@ def get_args_parser():
     )
     parser.add_argument(
         "--fid_samples",
-        default=50000,
+        default=1000,
         type=int,
-        help="number of synthetic samples for FID evaluations",
+        help="number of synthetic samples for FID evaluations during training. "
+             "For final paper metrics, use --fid_samples 5000 --eval_only with best checkpoint.",
     )
     parser.add_argument(
         "--device", default="cuda", help="device to use for training / testing"
@@ -168,6 +208,18 @@ def get_args_parser():
         "--save_fid_samples",
         action="store_true",
         help="Save all samples generated for FID computation.",
+    )
+    parser.add_argument(
+        "--early_stop_patience",
+        default=0,
+        type=int,
+        help="Stop training if loss does not improve for N consecutive epochs. 0 = disabled.",
+    )
+    parser.add_argument(
+        "--early_stop_min_delta",
+        default=1e-6,
+        type=float,
+        help="Minimum absolute loss decrease to count as improvement for early stopping.",
     )
     parser.add_argument("--num_workers", default=10, type=int)
     parser.add_argument(

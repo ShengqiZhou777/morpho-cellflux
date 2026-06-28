@@ -39,10 +39,6 @@ def save_model(
                 "epoch": epoch,
                 "scaler": loss_scaler.state_dict(),
                 "args": args,
-                "pcge": datamodule.embedding_matrix.state_dict()
-                    if datamodule is not None
-                    and getattr(datamodule, 'has_pcge', False)
-                    else None,
             }
 
             save_on_master(to_save, checkpoint_path)
@@ -113,10 +109,5 @@ def load_model(
             args.start_epoch = checkpoint["epoch"] + 1
             if "scaler" in checkpoint:
                 loss_scaler.load_state_dict(checkpoint["scaler"])
-
-            # PCGE load: restore embedding matrix state alongside model/optimizer
-            if datamodule is not None and getattr(datamodule, 'has_pcge', False):
-                if "pcge" in checkpoint and checkpoint["pcge"] is not None:
-                    datamodule.embedding_matrix.load_state_dict(checkpoint["pcge"])
 
             print("With optim & sched!")

@@ -9,7 +9,7 @@ trainable_emb: false
 dataset_name: perturbmulti
 dataset: phenoflux
 n_channels: 3
-channels: [9, 5, 8]
+channels: [9, 5, 10]
 multimodal: false
 batch_correction: false
 batch_key: null

@@ -74,6 +74,7 @@ def my_train_one_epoch(
     args: argparse.Namespace,
     datamodule: CellDataLoader,
     use_initial: int,
+    wandb_run=None,
 ):
     gc.collect()
     model.train(True)
@@ -193,6 +194,13 @@ def my_train_one_epoch(
             logger.info(
                 f"Epoch {epoch} [{data_iter_step}/{len(data_loader)}]: loss = {batch_loss.compute()}, lr = {lr}"
             )
+        # wandb per-step logging
+        if wandb_run is not None and data_iter_step % args.wandb_log_freq == 0:
+            wandb_run.log({
+                "train/batch_loss": batch_loss.compute().item(),
+                "train/lr": lr,
+                "train/epoch": epoch,
+            })
 
     lr_schedule.step()
     return {"loss": float(epoch_loss.compute().detach().cpu())}

@@ -59,6 +59,34 @@ def main(args):
     )
     init_distributed_mode(args)
 
+    # wandb initialization (rank 0 only, only when --wandb_project is set)
+    # Tries online mode first; falls back to offline mode if no API key is configured.
+    # Offline logs are saved to {output_dir}/wandb/ and can be uploaded later via `wandb sync`.
+    wandb_run = None
+    if args.wandb_project and is_main_process():
+        import wandb
+        run_name = args.wandb_run_name or os.path.basename(args.output_dir.rstrip("/"))
+        for mode in ("online", "offline"):
+            try:
+                wandb_run = wandb.init(
+                    project=args.wandb_project,
+                    entity=args.wandb_entity,
+                    name=run_name,
+                    tags=args.wandb_tags,
+                    config=vars(args),
+                    dir=args.output_dir,
+                    resume="allow",
+                    mode=mode,
+                )
+                logger.info(f"wandb ({mode}): {wandb_run.get_url() if mode == 'online' else wandb_run.dir}")
+                break
+            except Exception as e:
+                if mode == "online":
+                    logger.warning(f"wandb online failed ({e}), trying offline mode...")
+                else:
+                    logger.warning(f"wandb offline also failed ({e}), continuing without wandb")
+                    wandb_run = None
+
     logger.info("job dir: {}".format(os.path.dirname(os.path.realpath(__file__))))
     logger.info("{}".format(args).replace(", ", ",\n"))
     if is_main_process():
@@ -100,10 +128,6 @@ def main(args):
     )
     model.to(device)
 
-    # PCGE: move embedding matrix to device (double-safety: also done in dataloader)
-    if hasattr(datamodule, 'has_pcge') and datamodule.has_pcge:
-        datamodule.embedding_matrix.to(device)
-
     model_without_ddp = model
 
     eff_batch_size = (
@@ -121,12 +145,8 @@ def main(args):
         )
         model_without_ddp = model.module
 
-    # PCGE: include embedding_matrix parameters in optimizer
-    params = list(model_without_ddp.parameters())
-    if hasattr(datamodule, 'has_pcge') and datamodule.has_pcge:
-        params += list(datamodule.embedding_matrix.parameters())
     optimizer = torch.optim.AdamW(
-        params, lr=args.lr, betas=args.optimizer_betas
+        model_without_ddp.parameters(), lr=args.lr, betas=args.optimizer_betas
     )
     if args.decay_lr:
         lr_schedule = torch.optim.lr_scheduler.LinearLR(
@@ -160,6 +180,10 @@ def main(args):
 
     logger.info(f"Start from {args.start_epoch} to {args.epochs} epochs")
     start_time = time.time()
+    best_loss = float("inf")
+    best_fid = float("inf")
+    early_stop_counter = 0
+    import shutil
     for epoch in tqdm(range(args.start_epoch, args.epochs)):
         if args.distributed:
             data_loader_train.sampler.set_epoch(epoch)
@@ -175,6 +199,7 @@ def main(args):
                 args=args,
                 datamodule=datamodule,
                 use_initial=args.use_initial,
+                wandb_run=wandb_run,
             )
             log_stats = {
                 **{f"train_{k}": v for k, v in train_stats.items()},
@@ -197,6 +222,24 @@ def main(args):
                 epoch=epoch,
                 datamodule=datamodule,
             )
+            # Track best-loss checkpoint + early stopping (all ranks check for DDP safety)
+            current_loss = train_stats.get("loss", float("inf"))
+            improved = current_loss < best_loss - args.early_stop_min_delta
+            if improved:
+                best_loss = current_loss
+                early_stop_counter = 0
+                if is_main_process():
+                    best_path = Path(args.output_dir) / "checkpoint-best_loss.pth"
+                    shutil.copy2(Path(args.output_dir) / "checkpoint.pth", best_path)
+                    logger.info(f"New best loss: {best_loss:.6f} @ epoch {epoch}")
+            elif args.early_stop_patience > 0:
+                early_stop_counter += 1
+                if is_main_process():
+                    logger.info(f"Early stop: {early_stop_counter}/{args.early_stop_patience} epochs without loss improvement")
+                if early_stop_counter >= args.early_stop_patience:
+                    if is_main_process():
+                        logger.info(f"Early stopping triggered at epoch {epoch} (loss plateaued for {early_stop_counter} epochs).")
+                    break
 
         if args.output_dir and (
             (args.eval_frequency > 0 and (epoch + 1) % args.eval_frequency == 0)
@@ -226,9 +269,23 @@ def main(args):
             try:
                 log_stats.update({f"eval_{k}": v for k, v in eval_stats.items()})
                 logger.info(log_stats)
+                # Track best-FID checkpoint
+                if is_main_process() and "fid" in eval_stats and eval_stats["fid"] is not None:
+                    current_fid = eval_stats["fid"]
+                    if current_fid < best_fid:
+                        best_fid = current_fid
+                        best_path = Path(args.output_dir) / "checkpoint-best_fid.pth"
+                        shutil.copy2(Path(args.output_dir) / "checkpoint.pth", best_path)
+                        logger.info(f"New best FID: {best_fid:.4f} @ epoch {epoch}")
             except:
                 pass
         if args.output_dir and is_main_process():
+            # wandb epoch-level logging
+            if wandb_run is not None:
+                wandb_run.log(
+                    {f"epoch/{k}": v for k, v in log_stats.items()},
+                    step=epoch,
+                )
             with open(
                 os.path.join(args.output_dir, "log.txt"), mode="a", encoding="utf-8"
             ) as f:
@@ -240,6 +297,9 @@ def main(args):
     total_time = time.time() - start_time
     total_time_str = str(datetime.timedelta(seconds=int(total_time)))
     logger.info(f"Training time {total_time_str}")
+
+    if wandb_run is not None:
+        wandb_run.finish()
 
 
 def load_yaml_config(yaml_path):

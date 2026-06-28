@@ -34,12 +34,12 @@ method-comparison table should use named perturbation-generation methods:
 
 Copy-control is implemented as an internal null/sanity baseline, not as a
 headline named method. It can appear in metric-definition text, supplement, or
-as a dashed `gap_closed=0` reference line, but it does not need to occupy a row
+as a dashed `PGC=0` reference line, but it does not need to occupy a row
 in the main method-comparison table unless reviewers ask for a null predictor.
 
 | Internal baseline | Role | Status |
 |---|---|---|
-| Copy-control | biological null; defines `gap_closed = 0` | local adapter |
+| Copy-control | biological null; defines `PGC = 0` | local adapter |
 
 Optional supplementary baselines include no-control diffusion/FM variants and
 MorphGen/MorphDiff-style generation. These should not replace PhenDiff/IMPA in

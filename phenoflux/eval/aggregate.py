@@ -15,10 +15,11 @@ foreground-mean intensity of generated / real-target / source(control) cells and
   - DISTRIBUTION metrics vs the matched source-control reference: 1D Wasserstein
     & energy distance between the generated-cell and real-target-cell foreground-mean
     distributions, and the same for the trivial source(control) predictor. The headline is
-        gap_closed = 1 - d(gen, tgt) / d(src, tgt)
-    = fraction of the control->target population gap the model closes (1=perfect, 0=no
-    better than copying the control, <0=worse). This is the honest metric for diet, where
-    only 2 treated conditions exist and cross-gene Pearson is degenerate (==1.0).
+        PGC = 1 - d(gen, tgt) / d(src, tgt)
+    = Phenotypic Gap Closure — fraction of the control→target population gap the model
+    closes (1=perfect, 0=no better than copying the control, <0=worse). This is the
+    honest metric for diet, where only 2 treated conditions exist and cross-gene
+    Pearson is degenerate (==1.0).
   - CRISPR paper core: also aggregate genes by the original Perturb-Multi biological
     programs from `program_labels_paper.csv`.
 
@@ -103,7 +104,7 @@ def metric_table(gg, names, use_initial, label):
 
 def dist_metrics(sub_df, names):
     """Population distribution metrics per channel on per-cell foreground means.
-    Returns {name: {wd_gen, wd_src, gap_closed_wd, ed_gen, ed_src, gap_closed_ed}}."""
+    Returns {name: {wd_gen, wd_src, pgc_wd, ed_gen, ed_src, pgc_ed}}."""
     out = {}
     for name in names:
         gen = sub_df[f"gen_{name}"].dropna().to_numpy()
@@ -120,16 +121,16 @@ def dist_metrics(sub_df, names):
             gc_ed = 1 - ed_gen / ed_src if ed_src > 0 else np.nan
         else:
             wd_src = ed_src = gc_wd = gc_ed = np.nan
-        out[name] = dict(wd_gen=wd_gen, wd_src=wd_src, gap_closed_wd=gc_wd,
-                         ed_gen=ed_gen, ed_src=ed_src, gap_closed_ed=gc_ed)
+        out[name] = dict(wd_gen=wd_gen, wd_src=wd_src, pgc_wd=gc_wd,
+                         ed_gen=ed_gen, ed_src=ed_src, pgc_ed=gc_ed)
     return out
 
 
 def print_dist(dist, label):
     print(f"\n[{label}] population distance to real target (lower=closer) + source-control reference")
-    print(f"{'channel':12} {'W(gen,tgt)':>11} {'W(src,tgt)':>11} {'gap_closed':>11}  read")
+    print(f"{'channel':12} {'W(gen,tgt)':>11} {'W(src,tgt)':>11} {'PGC':>11}  read")
     for name, d in dist.items():
-        gc = d["gap_closed_wd"]
+        gc = d["pgc_wd"]
         read = ("closes source-target gap" if gc > 0.05 else
                 "near source-control reference" if gc > -0.05 else "worse than source-control reference")
         print(f"{name:12} {d['wd_gen']:11.4f} {d['wd_src']:11.4f} {gc:11.3f}  {read}")

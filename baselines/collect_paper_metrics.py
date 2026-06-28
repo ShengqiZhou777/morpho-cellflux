@@ -69,10 +69,10 @@ def diet_rows(runs: dict[str, str]) -> list[dict]:
             vals = []
             for channel, metrics in by_channel.items():
                 key = f"{condition}_{channel}_gap_wd"
-                rec[key] = metrics.get("gap_closed_wd")
-                vals.append(metrics.get("gap_closed_wd"))
+                rec[key] = metrics.get("pgc_wd")
+                vals.append(metrics.get("pgc_wd"))
                 if condition == "hfd":
-                    hfd_vals.append(metrics.get("gap_closed_wd"))
+                    hfd_vals.append(metrics.get("pgc_wd"))
             rec[f"{condition}_mean_gap_wd"] = _mean(vals)
         rec["hfd_mean_gap_wd"] = _mean(hfd_vals)
         rows.append(rec)
@@ -89,7 +89,7 @@ def crispr_rows(runs: dict[str, str]) -> list[dict]:
             continue
         rec = {"method": method, "run": rel, "status": "ok", "epoch": summary.get("epoch")}
         for channel, metrics in summary.get("dist_pooled", {}).items():
-            rec[f"{channel}_gap_wd"] = metrics.get("gap_closed_wd")
+            rec[f"{channel}_gap_wd"] = metrics.get("pgc_wd")
         for channel, metrics in summary.get("full", {}).items():
             rec[f"{channel}_dir_corr"] = metrics.get("dir_corr")
             rec[f"{channel}_sign_agree"] = metrics.get("sign_agree")

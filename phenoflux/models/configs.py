@@ -5,12 +5,11 @@
 # LICENSE file in the root directory of this source tree.
 """PhenoFlux model registry.
 
-One UNet body, configurable molecular prior modules:
-  Diet:   MSA (Marker Self-Attention) + PCD (Per-Channel Decoder)
-  CRISPR: PCGE (Program-Conditioned Gene Embedding)
+One UNet body, configurable molecular prior modules (dataset-agnostic):
+  MSA (Marker Self-Attention) + PCD (Per-Channel Decoder)
 
 Architecture:      phenoflux  (the only MODEL_CONFIGS entry)
-Molecular priors:  set via YAML config flags (use_msa, use_pcd, use_pcge, use_marker_profile)
+Molecular priors:  set via YAML config flags (use_msa, use_pcd, use_marker_profile)
 """
 
 from typing import Union
@@ -45,14 +44,12 @@ MODEL_CONFIGS = {
     "phenoflux": {
         **_SHARED_UNET,
         # ── Molecular prior flags (overridden by YAML config) ──
-        "base_condition_dim": 0,   # one-hot dim: 3 (diet) or 204 (crispr)
-        # Diet molecular priors (MSA + PCD operate on 18ch MERFISH profiles)
+        "base_condition_dim": 0,   # one-hot dim: 3 (diet) or 40 (crispr)
+        # Molecular priors (MSA + PCD operate on 18ch MERFISH profiles)
         "use_msa": False,          # Marker Self-Attention → +64 dims
         "use_pcd": False,          # Per-Channel Decoder (requires MSA)
         "use_marker_profile": False,  # naive 18ch concat → +18 dims (info control)
         "msa_output_dim": 64,
-        # CRISPR molecular prior
-        "use_pcge": False,         # Program-Conditioned Gene Embedding
         # condition_dim is computed automatically below
     },
 }
@@ -61,7 +58,7 @@ MODEL_CONFIGS = {
 # Molecular prior keys that can be overridden by YAML config
 _MOLECULAR_PRIOR_KEYS = {
     "base_condition_dim", "use_msa", "use_pcd", "use_marker_profile",
-    "use_pcge", "msa_output_dim",
+    "msa_output_dim",
 }
 
 
@@ -96,7 +93,7 @@ def instantiate_model(
     else:
         # Filter out keys that are NOT UNetModel dataclass fields.
         # Stored as model attributes for train/eval loop detection.
-        _NON_UNET_KEYS = {"use_pcge", "use_marker_profile"}
+        _NON_UNET_KEYS = {"use_marker_profile"}
         unet_config = {k: v for k, v in config.items() if k not in _NON_UNET_KEYS}
         model = UNetModel(**unet_config)
         for key in _NON_UNET_KEYS:

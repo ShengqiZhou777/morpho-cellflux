@@ -11,9 +11,8 @@ phenoflux/                    # Python package
 ├── models/
 │   ├── configs.py            # MODEL_CONFIGS registry (1 entry: phenoflux)
 │   ├── unet.py               # UNetModel with internal MSA/PCD
-│   ├── msa.py                # Marker Self-Attention (Diet)
-│   ├── pcd.py                # Per-Channel Decoder (Diet)
-│   ├── pcge.py               # Program-Conditioned Gene Embedding (CRISPR)
+│   ├── msa.py                # Marker Self-Attention (marker co-regulation)
+│   ├── pcd.py                # Per-Channel Decoder (per-channel modulation)
 │   ├── ema.py                # Exponential Moving Average
 │   ├── nn.py                 # NN utilities (SiLU, GroupNorm32, etc.)
 │   └── discrete_unet.py      # Discrete UNet variant
@@ -29,7 +28,7 @@ phenoflux/                    # Python package
 │   └── edm_time.py           # EDM time discretization
 └── eval/
     ├── fid.py                # FIDo/c, KIDo/c (matched-N)
-    ├── aggregate.py          # gap_closed, dir-corr, sign-agreement, Pearson
+    ├── aggregate.py          # PGC (Phenotypic Gap Closure), dir-corr, sign-agreement, Pearson
     ├── moa.py                # MoA classifier (InceptionV3 + MLP)
     └── figures.py            # Marker distribution KDE + bar charts
 
@@ -48,15 +47,14 @@ One UNet body (`phenoflux`), configurable molecular prior via YAML flags:
                     ┌─────────────────────────┐
 Condition (one-hot) │ base_condition_dim      │  3 (diet) / 40 (crispr)
                     ├─────────────────────────┤
-Molecular prior     │ use_msa / use_pcd       │  Diet: MSA → PCD
-                    │ use_pcge                │  CRISPR: PCGE
+Molecular prior     │ use_msa / use_pcd       │  MSA → PCD (both datasets)
                     │ use_marker_profile      │  Info control: naive 18ch concat
                     ├─────────────────────────┤
 condition_dim       │ auto-computed           │  base + 64 (MSA) or +18 (naive)
                     └─────────────────────────┘
 ```
 
-### Paper Configs (6)
+### Paper Configs (7)
 
 | Config | Dataset | Prior | condition_dim | Proves |
 |--------|---------|-------|:---:|--------|
@@ -65,7 +63,8 @@ condition_dim       │ auto-computed           │  base + 64 (MSA) or +18 (nai
 | `phenoflux_diet_msa` | Diet | MSA | 67 | Learned attention > naive |
 | `phenoflux_diet_msa_pcd` | Diet | MSA+PCD | 67 | Per-channel modulation helps |
 | `phenoflux_crispr` | CRISPR | none | 40 | Baseline |
-| `phenoflux_crispr_pcge` | CRISPR | PCGE | 40 | Program embedding helps |
+| `phenoflux_crispr_msa` | CRISPR | MSA | 104 | Marker prior generalizes |
+| `phenoflux_crispr_msa_pcd` | CRISPR | MSA+PCD | 104 | Per-channel modulation generalizes |
 
 Data size controlled via `--data_index` CLI (not separate configs):
 ```bash
@@ -127,13 +126,13 @@ torchrun --standalone --nproc_per_node=2 -m phenoflux.train \
   --eval_frequency 10 --fid_samples 5120 --compute_fid --save_fid_samples \
   --output_dir outputs/runs/crispr/phenoflux_crispr_v1
 
-# CRISPR + PCGE
+# CRISPR + MSA + PCD
 torchrun --standalone --nproc_per_node=2 -m phenoflux.train \
-  --dataset phenoflux --config phenoflux_crispr_pcge --device cuda \
+  --dataset phenoflux --config phenoflux_crispr_msa_pcd --device cuda \
   --batch_size 32 --epochs 40 --use_initial 1 --cfg_scale 0.2 \
   --use_ema --skewed_timesteps --class_drop_prob 0.2 \
   --eval_frequency 10 --fid_samples 5120 --compute_fid --save_fid_samples \
-  --output_dir outputs/runs/crispr/phenoflux_crispr_pcge_v1
+  --output_dir outputs/runs/crispr/phenoflux_crispr_msa_pcd_v1
 ```
 
 ## Evaluation
@@ -143,7 +142,7 @@ torchrun --standalone --nproc_per_node=2 -m phenoflux.train \
 python phenoflux/eval/fid.py --real-dir <real_imgs> --gen-dir <gen_imgs> --per-condition-cap 500
 ```
 
-### Biological metrics (gap_closed, dir-corr, sign-agreement)
+### Biological metrics (PGC, dir-corr, sign-agreement)
 ```bash
 python phenoflux/eval/aggregate.py <eval_dir> 5 <epoch>
 ```

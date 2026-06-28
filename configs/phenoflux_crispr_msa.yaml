@@ -1,7 +1,7 @@
-# CRISPR perturbmulti — Program-Conditioned Gene Embedding (PCGE).
-# Replaces flat 40-dim one-hot with hierarchical K=7 program embedding.
-# 40 genes organized into 7 biological programs. Genes in the same
-# program share representations for better generalization.
+# CRISPR perturbmulti — Marker Self-Attention (MSA).
+# MSA learns cross-marker co-regulation from 18ch MERFISH profiles,
+# producing a 64-dim context that supplements the 40-dim gene one-hot.
+# Total condition_dim = 40 + 64 = 104.
 task_name: crispr_paper_core
 ood_set: null
 mol_list: null
@@ -26,5 +26,4 @@ augment_train: false
 normalize: false
 # PhenoFlux molecular prior
 base_condition_dim: 40
-use_pcge: true
-pcge_embed_dim: 256
+use_msa: true

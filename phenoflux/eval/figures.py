@@ -152,7 +152,7 @@ def summarize(rows, marker_names):
                 target_paired = np.array([row["target"][idx] for row in paired], dtype=float)
                 w_gen_target = wasserstein_distance(gen_paired, target_paired)
                 w_control_target = wasserstein_distance(control, target_paired)
-                gap_closed = (
+                pgc = (
                     1.0 - w_gen_target / w_control_target
                     if w_control_target > 0
                     else float("nan")
@@ -161,7 +161,7 @@ def summarize(rows, marker_names):
             else:
                 w_gen_target = float("nan")
                 w_control_target = float("nan")
-                gap_closed = float("nan")
+                pgc = float("nan")
                 control_mean = float("nan")
             summary_rows.append(
                 {
@@ -175,7 +175,7 @@ def summarize(rows, marker_names):
                     "generated_minus_target": float(gen.mean() - target.mean()),
                     "wasserstein_generated_target": float(w_gen_target),
                     "wasserstein_control_target": float(w_control_target),
-                    "gap_closed": float(gap_closed),
+                    "pgc": float(pgc),
                 }
             )
     return summary_rows
@@ -185,7 +185,7 @@ def write_summary(summary_rows, out_csv, out_json, metadata):
     fieldnames = [
         "condition", "marker", "n_generated", "n_paired_control", "generated_mean",
         "target_mean", "control_mean", "generated_minus_target",
-        "wasserstein_generated_target", "wasserstein_control_target", "gap_closed",
+        "wasserstein_generated_target", "wasserstein_control_target", "pgc",
     ]
     with out_csv.open("w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
@@ -346,7 +346,7 @@ def main():
     if not mapping_complete:
         print(
             "warning: treated->control mapping is incomplete; "
-            "distribution plots use all generated/target rows, paired gap_closed uses only mapped rows"
+            "distribution plots use all generated/target rows, paired PGC uses only mapped rows"
         )
     print(f"rows used: {len(rows)} / pngs on disk: {n_pngs}; paired controls: {n_paired}")
     print(f"saved: {out_dist}")

@@ -95,9 +95,6 @@ class CellDataset:
         self.n_y = len(self.y_names)  # Number of unique annotations
         self.iter_ctrl = args.iter_ctrl
 
-        # PCGE flag: must be set BEFORE initialize_embeddings()
-        self.use_pcge = getattr(args, 'use_pcge', False)
-
         # Initialize embeddings
         self.initialize_embeddings()
 
@@ -259,26 +256,8 @@ class CellDataset:
                 embedding_matrix = embedding_matrix.loc[self.mol_names]
                 embedding_matrix = torch.tensor(embedding_matrix.values, dtype=torch.float32, device=self.device)
 
-                # PCGE: replace frozen one-hot with Hierarchical Program-Conditioned Gene Embedding
-                if self.use_pcge:
-                    from phenoflux.models.pcge import (
-                        GeneProgramEncoder, build_gene_to_program_mapping)
-                    gene_to_prog, num_programs, _ = build_gene_to_program_mapping(
-                        index_csv_path=self.data_index_path,
-                        mol_names=self.mol_names,
-                    )
-                    self.embedding_matrix = GeneProgramEncoder(
-                        num_genes=len(self.mol_names),
-                        embed_dim=256,
-                        output_dim=int(embedding_matrix.shape[1]),
-                        num_programs=num_programs,
-                        gene_to_program=gene_to_prog,
-                    )
-                    self.embedding_matrix.to(self.device)
-                    self.has_pcge = True
-                else:
-                    self.embedding_matrix = torch.nn.Embedding.from_pretrained(
-                        embedding_matrix, freeze=True).to(self.device)
+                self.embedding_matrix = torch.nn.Embedding.from_pretrained(
+                    embedding_matrix, freeze=True).to(self.device)
 
                 self.latent_dim = embedding_matrix.shape[1]
 
@@ -507,7 +486,6 @@ class CellDataLoader(LightningDataModule):
 
         # Integrate embeddings as class attribute
         self.embedding_matrix = dataset.embedding_matrix
-        self.has_pcge = getattr(dataset, 'has_pcge', False)
         self.latent_dim = dataset.latent_dim
 
         # Number of molecules and annotations (the latter can be modes of action/genes...)
@@ -613,7 +591,6 @@ class CellDataLoader_Eval(LightningDataModule):
 
         # Integrate embeddings as class attribute
         self.embedding_matrix = dataset.embedding_matrix
-        self.has_pcge = getattr(dataset, 'has_pcge', False)
         self.latent_dim = dataset.latent_dim
 
         # Number of molecules and annotations (the latter can be modes of action/genes...)

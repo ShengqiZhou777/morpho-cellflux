@@ -1,5 +1,11 @@
 """Build CRISPR paper-line artifacts from Perturb-Multi-supported programs.
 
+NOTE: The program-label outputs (index_paper_programs*.csv, program_labels_paper.csv)
+were originally consumed by the PCGE module, which has been removed. They are kept
+here only as a record of the per-gene functional-program grouping (used for
+descriptive program-level reporting); the live training/eval path uses
+index_paper_40.csv + a flat gene one-hot, with MSA/PCD as the molecular prior.
+
 This script creates the CRISPR paper-core subset under `data/processed/crispr/`:
 
   index_paper_programs.csv
