@@ -32,50 +32,46 @@ MSA/PCD. Image metrics ↓ lower-better; MoA / PGC ↑ higher-better. `Diet` /
   </tbody>
 </table>
 
-## Table 2: Diet Ablation — Information × Architecture
+## Table 2: Ablation — Molecular Prior (Diet + CRISPR)
 
-All rows use identical training hyperparameters (use_initial=1, cfg_scale=0.2,
-AdamW lr=1e-4, 20 epochs). 3-channel `[9,5,10]` output. Only conditioning and
-architectural modules vary.
+Cumulative component ablation, same row/column layout as Table 1. All rows share
+identical training hyperparameters (use_initial=1, cfg_scale=0.2, AdamW lr=1e-4,
+20 epochs diet / 40 epochs crispr) and the `[9,5,10]` panel — only the molecular
+prior varies. `+18ch` (naive 18-channel concat, no learned attention) is the
+information control and applies to Diet only.
 
-| Row | Config                     | Condition                | MSA | PCD | FIDc↓ | PGC↑ |
-| --- | -------------------------- | ------------------------ | --- | --- | ------ | ----- |
-| 1   | `phenoflux_diet`         | one-hot [3]              | ❌  | ❌  | —     | —    |
-| 2   | `phenoflux_diet_18ch`    | one-hot [3] + 18ch naive | ❌  | ❌  | —     | —    |
-| 3   | `phenoflux_diet_msa`     | one-hot [3] + MSA [67]   | ✅  | ❌  | —     | —    |
-| 4   | `phenoflux_diet_msa_pcd` | one-hot [3] + MSA [67]   | ✅  | ✅  | —     | —    |
+<table>
+  <thead>
+    <tr>
+      <th rowspan="2">Variant</th>
+      <th colspan="6">Diet</th>
+      <th colspan="6">CRISPR</th>
+    </tr>
+    <tr>
+      <th>FIDo↓</th><th>FIDc↓</th><th>KIDo↓</th><th>KIDc↓</th><th>MoA↑</th><th>PGC↑</th>
+      <th>FIDo↓</th><th>FIDc↓</th><th>KIDo↓</th><th>KIDc↓</th><th>MoA↑</th><th>PGC↑</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr><td>baseline (one-hot)</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td></tr>
+    <tr><td>+18ch (naive concat)</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>n/a</td><td>n/a</td><td>n/a</td><td>n/a</td><td>n/a</td><td>n/a</td></tr>
+    <tr><td>+MSA</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td></tr>
+    <tr><td>+MSA +PCD</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td></tr>
+  </tbody>
+</table>
 
-**What each row tests:**
+What the rows isolate:
 
-| Row | Answers                                                                                                 |
-| --- | ------------------------------------------------------------------------------------------------------- |
-| 1   | Flow matching baseline with minimal condition                                                           |
-| 2   | **Information control**: same 18ch info as rows 3–4, but naive concat — no learned architecture |
-| 3   | MSA contribution: does learned marker self-attention outperform naive concat?                           |
-| 4   | PCD contribution: does per-channel modulation add gain beyond MSA alone?                                |
+- **baseline → +18ch** (Diet): information control — same 18ch marker profile as
+  +MSA but naive mean-pool concat. If it doesn't beat baseline, the *architecture*
+  (not the extra information) drives the gain.
+- **+18ch → +MSA**: contribution of learned marker self-attention over naive concat.
+- **+MSA → +MSA+PCD**: contribution of per-channel modulation on top of MSA.
+- **Diet vs CRISPR**: the same MSA/PCD pair transfers from physiological to genetic
+  perturbations (one prior, two datasets).
 
-Key contrast: Rows 1→2→3→4 is a cumulative gain chain. Row 2 has the same
-18-channel marker profile as Rows 3–4 — if it doesn't improve over Row 1,
-the architecture (MSA/PCD), not the extra information, drives performance.
-
-## Table 3: CRISPR Ablation
-
-CRISPR only. All methods evaluated on 3-channel panel `[9,5,10]`
-(Calreticulin / Perilipin / pS6RP), 40 paper-core genes. The molecular-prior
-modules (MSA, PCD) are identical to Diet — only the dataset and condition differ.
-
-| Row | Config                       | Prior                 | Proves                                   |
-| --- | ---------------------------- | --------------------- | ---------------------------------------- |
-| 1   | `phenoflux_crispr`         | none (40-dim one-hot) | Flow matching baseline                   |
-| 2   | `phenoflux_crispr_msa`     | MSA                   | Marker prior generalizes across datasets |
-| 3   | `phenoflux_crispr_msa_pcd` | MSA + PCD             | Per-channel modulation generalizes too   |
-
-Key contrasts:
-
-- **1→2**: MSA cross-dataset generalization (same 18ch data, different task)
-- **2→3**: per-channel PCD modulation on top of MSA, mirroring the Diet ablation
-- **Diet row 3/4 vs CRISPR row 2/3**: the same module pair transfers across
-  physiological and genetic perturbations
+Config mapping: baseline = `phenoflux_{diet,crispr}`, +18ch = `phenoflux_diet_18ch`,
++MSA = `phenoflux_{diet,crispr}_msa`, +MSA+PCD = `phenoflux_{diet,crispr}_msa_pcd`.
 
 ## Configs Quick Reference
 
