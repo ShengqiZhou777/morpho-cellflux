@@ -33,6 +33,7 @@ FID_SAMPLES="${FID_SAMPLES:-64}"
 EVAL_FREQ=1
 OUT_DIR="${OUT_DIR:-outputs/quick_validate/${CONFIG}_$(date +%Y%m%d_%H%M%S)}"
 SKIP_TRAIN="${SKIP_TRAIN:-0}"
+WANDB_PROJECT="${WANDB_PROJECT:-phenoflux}"
 
 # --- Conda setup ---
 if [[ -f "/home/ubuntu/miniconda3/etc/profile.d/conda.sh" ]]; then
@@ -62,6 +63,9 @@ if [[ "$SKIP_TRAIN" != "1" ]]; then
         --skewed_timesteps --class_drop_prob 0.2 \
         --eval_frequency "$EVAL_FREQ" --fid_samples "$FID_SAMPLES" \
         --compute_fid --save_fid_samples \
+        --wandb_project "$WANDB_PROJECT" \
+        --wandb_run_name "qv_${CONFIG}_$(date +%m%d_%H%M)" \
+        --wandb_tags "quick-validate,${CONFIG}" \
         --data_index "$DATA_INDEX" \
         --test_run \
         --output_dir "$OUT_DIR" \

@@ -21,6 +21,7 @@ EPOCHS="${EPOCHS:-5}"
 FID_SAMPLES="${FID_SAMPLES:-512}"
 DATA_INDEX="${DATA_INDEX:-data/processed/diet/index_diet_5k.csv}"
 TAG="ablate_$(date +%m%d_%H%M)"
+WANDB_PROJECT="${WANDB_PROJECT:-phenoflux}"
 
 declare -A CONFIGS=(
     [baseline]="phenoflux_diet"
@@ -61,6 +62,9 @@ for NAME in "${RUN_LIST[@]}"; do
         --eval_frequency "$EPOCHS" --fid_samples "$FID_SAMPLES" \
         --compute_fid --save_fid_samples \
         --eval_batch_size 128 \
+        --wandb_project "$WANDB_PROJECT" \
+        --wandb_run_name "diet_${NAME}_${TAG}" \
+        --wandb_tags "diet,ablation,${NAME}" \
         --data_index "$DATA_INDEX" \
         --output_dir "$OUT" \
         2>&1 | tee "$OUT/train.log"
