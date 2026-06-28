@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Launch perturbmulti (Perturb-Multi hepatocyte) training on N GPUs.
+# Launch PhenoFlux flow-matching training on N GPUs.
 # Per-step stdout is persisted to $OUT/train_stdout.log.
 #
 # Override defaults via env vars, e.g.:
@@ -13,7 +13,7 @@ if [[ -z "$TORCHRUN" ]]; then
   exit 127
 fi
 
-OUT=${OUT:-$PROJECT_DIR/outputs/runs/crispr/perturbmulti_id_v1}
+OUT=${OUT:-$PROJECT_DIR/outputs/runs/crispr/phenoflux_crispr_v1}
 BATCH=${BATCH:-16}          # per-GPU batch size. 16 uses about 25GB and is safe through FID eval on a 32GB card.
 ACCUM=${ACCUM:-1}           # gradient accumulation. Effective batch = BATCH * ACCUM * NPROC, no extra memory.
 EPOCHS=${EPOCHS:-40}
@@ -23,8 +23,10 @@ NPROC=${NPROC:-2}
 USE_INITIAL=${USE_INITIAL:-1}   # 0 = noise to target, 1 = control init, 2 = control plus noise.
 NOISE_LEVEL=${NOISE_LEVEL:-0.2} # noise added to the control image when USE_INITIAL=2.
 CFG=${CFG:-0.2}                 # classifier-free guidance scale at sampling.
-CONFIG=${CONFIG:-crispr_paper_core}       # config name under configs/, selects the data index and embedding.
-DATASET=${DATASET:-perturbmulti_id}           # model arch. perturbmulti_id has condition_dim 204 (gene-identity one-hot).
+CONFIG=${CONFIG:-phenoflux_crispr}            # config name under configs/, selects the data index and embedding.
+DATASET=${DATASET:-phenoflux}                 # dataset name passed to --dataset.
+WANDB_PROJECT="${WANDB_PROJECT:-phenoflux}"
+WANDB_RUN_NAME="${WANDB_RUN_NAME:-crispr_$(basename "$OUT")}"
 ODE_OPTIONS=${ODE_OPTIONS:-'{"step_size": 0.02}'}
 FOREGROUND_LOSS=${FOREGROUND_LOSS:-0}
 FOREGROUND_THRESHOLD=${FOREGROUND_THRESHOLD:-0.05}
@@ -57,4 +59,5 @@ PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \
   --eval_frequency "$EVAL_FREQ" --compute_fid --fid_samples "$FID_SAMPLES" \
   --ode_options "$ODE_OPTIONS" --save_fid_samples \
   --early_stop_patience "$EARLY_STOP" \
+  --wandb_project "$WANDB_PROJECT" --wandb_run_name "$WANDB_RUN_NAME" \
   --output_dir "$OUT" "${EXTRA_ARGS[@]}" 2>&1 | tee -a "$OUT/train_stdout.log"

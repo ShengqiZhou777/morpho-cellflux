@@ -82,7 +82,7 @@ echo ""
 echo "=========================================="
 echo "Ablation complete. Summary:"
 echo "=========================================="
-for NAME in baseline naive msa msa_pcd; do
+for NAME in "${RUN_LIST[@]}"; do
     OUT="outputs/ablate_diet/${TAG}/${NAME}"
     echo ""
     echo "--- $NAME ---"

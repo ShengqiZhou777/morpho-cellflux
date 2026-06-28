@@ -32,8 +32,8 @@ phenoflux/                    # Python package
     ├── moa.py                # MoA classifier (InceptionV3 + MLP)
     └── figures.py            # Marker distribution KDE + bar charts
 
-configs/                      # 6 paper experiment configs
-scripts/                      # train.sh, quick_validate.sh, build data scripts
+configs/                      # 7 paper experiment configs
+scripts/                      # train.sh, quick_validate.sh, ablate_*.sh, build/bench scripts
 baselines/                    # IMPA, PhenDiff, StarGAN, MorphoDiff adapters
 outputs/                      # Training outputs (gitignored)
 docs/                         # ARCHITECTURE, EVAL_PROTOCOL, REPRODUCING
@@ -161,6 +161,22 @@ python phenoflux/eval/moa.py \
 bash scripts/quick_validate.sh <config> phenoflux [data_index]
 # Example: bash scripts/quick_validate.sh phenoflux_diet phenoflux
 ```
+
+## Scripts
+
+| Script | Purpose | Key Env Vars |
+|--------|---------|--------------|
+| `scripts/train.sh` | General-purpose training launcher | `CONFIG`, `DATASET`, `EPOCHS`, `BATCH`, `CFG` |
+| `scripts/quick_validate.sh` | Fast 2-epoch validation (64 images) | — |
+| `scripts/ablate_diet.sh` | Diet 4-config ablation (`baseline,naive,msa,msa_pcd`) | `CONFIGS`, `EPOCHS`, `DATA_INDEX` |
+| `scripts/ablate_crispr.sh` | CRISPR 3-config ablation (`baseline,msa,msa_pcd`) | `CONFIGS`, `EPOCHS`, `DATA_INDEX` |
+| `scripts/build_diet_data.py` | Build full diet index from raw parquet/h5ad | — |
+| `scripts/build_diet_subset.py` | Build stratified diet subsets (5k/50k/100k/200k) | — |
+| `scripts/build_crispr_paper_data.py` | Build CRISPR paper_40 index from raw | — |
+| `scripts/analyze_diet_scale.py` | Diet data scale/distribution analysis | — |
+| `scripts/bench_solver.py` | ODE solver benchmark (dopri5/rk4/euler) | — |
+
+All train scripts accept `--wandb_project` / `--wandb_run_name` for experiment tracking.
 
 ## Environment
 - Conda env: `pmf`
