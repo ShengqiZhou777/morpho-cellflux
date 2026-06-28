@@ -151,7 +151,7 @@ real shift      = real_treated_gene_mean − control_gene_mean
 Script:
 
 ```
-python scripts/aggregate_eval.py outputs/runs/diet/<run> 5 <epoch>
+python phenoflux/eval/aggregate.py outputs/runs/diet/<run> 5 <epoch>
 python phenoflux/eval/figures.py --run-dir outputs/runs/diet/<run> --epoch <epoch> ...
 ```
 

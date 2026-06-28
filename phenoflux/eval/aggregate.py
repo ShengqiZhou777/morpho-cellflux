@@ -23,7 +23,7 @@ foreground-mean intensity of generated / real-target / source(control) cells and
   - CRISPR paper core: also aggregate genes by the original Perturb-Multi biological
     programs from `program_labels_paper.csv`.
 
-Usage:  python scripts/aggregate_eval.py <eval_run_dir> [min_n] [epoch]
+Usage:  python phenoflux/eval/aggregate.py <eval_run_dir> [min_n] [epoch]
 The run dir must contain fid_samples/<epoch>/<gene>/<target_id>.png and
 fid_samples/trt2ctrl_idx.json (produced by train.py --save_fid_samples).
 """

@@ -6,7 +6,8 @@
 #   bash scripts/ablate_diet.sh
 #
 # Environment overrides:
-#   NPROC=2 EPOCHS=5 FID_SAMPLES=512
+#   NPROC=2 EPOCHS=5 FID_SAMPLES=512 DATA_INDEX=... CONFIGS=msa,msa_pcd
+#   CONFIGS: comma-separated subset (baseline,naive,msa,msa_pcd). Default: all four.
 
 set -euo pipefail
 
@@ -18,7 +19,7 @@ export PATH=/home/ubuntu/miniconda3/envs/pmf/bin:$PATH
 NPROC="${NPROC:-2}"
 EPOCHS="${EPOCHS:-5}"
 FID_SAMPLES="${FID_SAMPLES:-512}"
-DATA_INDEX="data/processed/diet/index_diet_5k.csv"
+DATA_INDEX="${DATA_INDEX:-data/processed/diet/index_diet_5k.csv}"
 TAG="ablate_$(date +%m%d_%H%M)"
 
 declare -A CONFIGS=(
@@ -28,13 +29,21 @@ declare -A CONFIGS=(
     [msa_pcd]="phenoflux_diet_msa_pcd"
 )
 
+# Allow subset via CONFIGS env var, e.g. CONFIGS=msa,msa_pcd
+if [[ -n "${CONFIGS:-}" ]]; then
+    IFS=',' read -ra RUN_LIST <<< "$CONFIGS"
+else
+    RUN_LIST=(baseline naive msa msa_pcd)
+fi
+N_CFG=${#RUN_LIST[@]}
+
 echo "=========================================="
-echo "Diet Ablation: 4 configs × ${EPOCHS} epochs"
+echo "Diet Ablation: ${N_CFG} config(s) × ${EPOCHS} epochs"
 echo "  GPUs=$NPROC  FID=$FID_SAMPLES  Data=$DATA_INDEX"
-echo "  Tag: $TAG"
+echo "  Tag: $TAG  Configs: ${RUN_LIST[*]}"
 echo "=========================================="
 
-for NAME in baseline naive msa msa_pcd; do
+for NAME in "${RUN_LIST[@]}"; do
     CONFIG="${CONFIGS[$NAME]}"
     OUT="outputs/ablate_diet/${TAG}/${NAME}"
     mkdir -p "$OUT"
@@ -60,7 +69,7 @@ for NAME in baseline naive msa msa_pcd; do
     FID_DIR=$(find "$OUT/fid_samples" -maxdepth 1 -type d -name "epoch-*" 2>/dev/null | sort | tail -1)
     if [[ -n "$FID_DIR" ]]; then
         EPOCH_NUM=$(basename "$FID_DIR" | sed 's/epoch-//')
-        python3 scripts/aggregate_eval.py "$OUT" 5 "$EPOCH_NUM" \
+        python3 phenoflux/eval/aggregate.py "$OUT" 5 "$EPOCH_NUM" \
             2>&1 | tee "$OUT/aggregate_eval.log"
     fi
 done

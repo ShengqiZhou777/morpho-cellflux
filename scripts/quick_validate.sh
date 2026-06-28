@@ -116,7 +116,7 @@ echo "--- [3/3] Computing aggregate metrics ---"
 EPOCH_NUM=$(basename "$FID_DIR" | sed 's/epoch-//')
 
 # Run aggregate_eval
-python3 scripts/aggregate_eval.py "$OUT_DIR" 5 "$EPOCH_NUM" \
+python3 phenoflux/eval/aggregate.py "$OUT_DIR" 5 "$EPOCH_NUM" \
     2>&1 | tee "$OUT_DIR/aggregate_eval.log"
 
 # Check for results
