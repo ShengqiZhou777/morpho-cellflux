@@ -9,18 +9,18 @@ PYTHON ?= python
 data:
 	$(PYTHON) scripts/build_microalgae_dataset.py --version microalgae_v1 --views timepoint,field
 
-# ---- omics: interpolate omics PCA -> 62d condition embedding (embedding_62d.csv) ----
+# ---- omics: interpolate raw gene/protein -> 476-dim condition embedding (embedding_genes.csv) ----
 interpolate:
-	$(PYTHON) scripts/interpolate_omics_to_timepoints.py
+	$(PYTHON) scripts/build_gene_condition.py
 
 # ---- smoke: CPU repo-local validation, no external data required ----
 smoke:
 	$(PYTHON) scripts/smoke_validate.py
 
-# ---- quick: 1-GPU sanity run of the primary 62d path ----
+# ---- quick: 1-GPU sanity run of the primary gene path ----
 quick:
-	bash scripts/quick_validate.sh microalgae_timepoint_512_62d
+	bash scripts/quick_validate.sh microalgae_timepoint_512_genes
 
-# ---- train: full training of the primary 62d config (scripts/train.sh is env-var parameterized) ----
+# ---- train: full training of the primary gene config (scripts/train.sh is env-var parameterized) ----
 train:
-	CONFIG=microalgae_timepoint_512_62d DATASET=phenoflux bash scripts/train.sh
+	CONFIG=microalgae_timepoint_512_genes DATASET=phenoflux bash scripts/train.sh

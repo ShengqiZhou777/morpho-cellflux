@@ -48,12 +48,12 @@ archive_crispr_diet_2026_07_04/  # Archived materials (gitignored)
 
 Two granularity levels for microalgae phenotype generation:
 
-#### 1. Single-Cell Level (`microalgae_timepoint_512_62d.yaml`, primary)
+#### 1. Single-Cell Level (`microalgae_timepoint_512_genes.yaml`, primary)
 - **Images**: RGB crops (512×512, 3 channels)
 - **Image source**: `data/raw/microalgae_v1/single_cell_images`
-- **Condition**: 62-dim embedding = 2 light/dark + 1 time_norm + 1 time_bin_h + 29 RNA PCA + 29 Protein PCA (z-scored)
+- **Condition**: 476-dim condition = 2 light/dark + 1 time_norm + 1 time_bin_h + 372 genes + 100 proteins (z-scored)
 - **Data index**: `data/processed/microalgae_v1/views/timepoint_512/index.csv`
-- **Embedding**: `data/processed/microalgae_v1/views/timepoint_512/embedding_62d.csv`
+- **Embedding**: `data/processed/microalgae_v1/views/timepoint_512/embedding_genes.csv`
 - **4d baseline**: `microalgae_timepoint_512.yaml` (same view, no omics — ablation counterpart)
 - **Use case**: Cell-level phenotype prediction
 
@@ -89,8 +89,8 @@ Input (3ch RGB) → UNet Encoder → Condition Embedding + Time Embedding
 - `model_channels`: 128
 - `base_condition_dim`: config-dependent
   - **Base configs** (`microalgae_timepoint_512`, `microalgae_smoke`): 4 dims — `light/dark/time_norm/time_bin_h`.
-  - **Omics-enriched config** (`microalgae_timepoint_512_62d`): 62 dims — 4 base + 29 RNA PCA + 29 Protein PCA (z-scored), built by `scripts/interpolate_omics_to_timepoints.py` → `embedding_62d.csv`. This is the Stage-2 condition that addresses the identity-mapping collapse.
-  - The embedding CSV carries a `timegroup_key` index column that the dataloader drops (`index_col=0`), so 63 CSV columns → 62 feature dims.
+  - **Gene/protein config** (`microalgae_timepoint_512_genes`, primary): 476 dims — 4 base + 372 high-variable genes (log-FPKM std>2) + 100 top-variable proteins, linear-interpolated per feature from the 9 measured timepoints (raw FPKM, **no PCA**), z-scored, built by `scripts/build_gene_condition.py` → `embedding_genes.csv`. Replaces the discarded PCA+cubic approach (empirically unreliable at late timepoints).
+  - The embedding CSV carries a `timegroup_key` index column that the dataloader drops (`index_col=0`), so 477 CSV columns → 476 feature dims.
 - `condition_dim`: Same as `base_condition_dim` (no molecular prior concat)
 
 **What we DON'T use** (archived with CRISPR/Diet):
@@ -107,13 +107,13 @@ Input (3ch RGB) → UNet Encoder → Condition Embedding + Time Embedding
 # CPU smoke (no external data, validates dataloader+model path)
 make smoke
 
-# Build the 62d omics condition embedding for the primary path
+# Build the gene/protein condition embedding for the primary path
 make interpolate
 
-# 1-GPU quick sanity run of the primary 62d config
+# 1-GPU quick sanity run of the primary gene config
 make quick
 
-# Full training of the primary 62d config (1x RTX 4090)
+# Full training of the primary gene config (1x RTX 4090)
 make train
 
 # Baseline / overrides (scripts/train.sh is env-var parameterized):
@@ -153,8 +153,8 @@ python phenoflux/eval/aggregate_microalgae.py <run_dir> 5 <epoch>
 # Build single-cell (timepoint) + field processed views
 python scripts/build_microalgae_dataset.py --version microalgae_v1 --views timepoint,field
 
-# Build the 62d omics condition embedding for the primary path
-python scripts/interpolate_omics_to_timepoints.py
+# Build the gene/protein condition embedding for the primary path
+python scripts/build_gene_condition.py
 
 # Build field metadata (EXIF + morphology summaries) only
 python scripts/build_field_metadata.py

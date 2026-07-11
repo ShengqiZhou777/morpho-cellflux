@@ -8,7 +8,7 @@ Current engineering target: **two clean lanes with separate contracts**.
 cell lane (primary):
   data/raw/microalgae_v1/single_cell_images
       -> data/processed/microalgae_v1/views/timepoint_512/
-      -> configs/microalgae_timepoint_512_62d.yaml   (62d omics condition)
+      -> configs/microalgae_timepoint_512_genes.yaml   (476-dim gene/protein condition)
 
 field lane:
   data/raw/microalgae_v1/field_images
@@ -56,11 +56,11 @@ data/processed/microalgae_v1/views/timepoint/embedding.csv
 data/processed/microalgae_v1/views/timepoint/summary.json
 ```
 
-Build the 62d omics condition embedding for the primary cell-lane config
-(writes `views/timepoint_512/embedding_62d.csv`):
+Build the gene/protein condition embedding for the primary cell-lane config
+(writes `views/timepoint_512/embedding_genes.csv`):
 
 ```bash
-python scripts/interpolate_omics_to_timepoints.py
+python scripts/build_gene_condition.py
 ```
 
 Build the field lane:
@@ -96,7 +96,7 @@ bash scripts/migrate_processed_layout.sh
 ### 3. Quick Validate
 
 ```bash
-bash scripts/quick_validate.sh        # defaults to the primary 62d config
+bash scripts/quick_validate.sh        # defaults to the primary gene config
 ```
 
 For a repo-local smoke check that does not require external FusionODE data:
@@ -114,9 +114,9 @@ python scripts/field_smoke_validate.py
 ### 4. Train
 
 ```bash
-CONFIG=microalgae_timepoint_512_62d \
+CONFIG=microalgae_timepoint_512_genes \
 DATASET=phenoflux \
-OUT=outputs/runs/microalgae/timepoint_512_62d_v1 \
+OUT=outputs/runs/microalgae/timepoint_512_genes_v1 \
 EPOCHS=40 \
 FID_SAMPLES=1024 \
 bash scripts/train.sh
@@ -128,7 +128,7 @@ Primary cell lane + baseline + field lane (full set and roles in
 `configs/README.md`):
 
 ```text
-configs/microalgae_timepoint_512_62d.yaml   (primary, 62d omics)
+configs/microalgae_timepoint_512_genes.yaml   (primary, 476-dim gene/protein)
 configs/microalgae_timepoint_512.yaml       (4d baseline)
 configs/microalgae_field.yaml               (field lane)
 ```
@@ -138,7 +138,7 @@ The primary config points to:
 ```yaml
 image_path: data/raw/microalgae_v1/single_cell_images
 data_index_path: data/processed/microalgae_v1/views/timepoint_512/index.csv
-embedding_path: data/processed/microalgae_v1/views/timepoint_512/embedding_62d.csv
+embedding_path: data/processed/microalgae_v1/views/timepoint_512/embedding_genes.csv
 ```
 
 The field config points to:
@@ -161,7 +161,7 @@ pip install -e .
 
 ```text
 phenoflux/          Training, models, dataloaders, and microalgae evaluation code
-configs/            5 active configs (primary 62d, 4d baseline, field, smoke, validation)
+configs/            5 active configs (primary gene, 4d baseline, field, smoke, validation)
 scripts/            Active data builders, smoke check, and training launchers
 data/raw/           Project-local raw data root
 data/processed/     Versioned processed artifacts

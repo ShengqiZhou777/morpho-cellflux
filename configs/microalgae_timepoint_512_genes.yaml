@@ -1,0 +1,31 @@
+# Microalgae timepoint with raw gene/protein condition (no PCA).
+# 476 dims = 4 base (light/dark/time_norm/time_bin_h)
+#          + 372 high-variable genes (log-FPKM std>2)
+#          + 100 top-variable proteins (log-abundance).
+# Built by scripts/build_gene_condition.py via linear interpolation of raw
+# log-FPKM across the 9 measured timepoints (leave-one-out validated as reliable;
+# replaces the discarded PCA+cubic approach).
+task_name: microalgae_timepoint_512_genes
+ood_set: null
+mol_list: null
+trainable_emb: false
+dataset_name: microalgae
+dataset: phenoflux
+n_channels: 3
+channels: null
+multimodal: false
+batch_correction: false
+batch_key: null
+use_condition_embeddings: false
+add_controls: false
+condition_embedding_dimension: null
+modality_list:
+  - BioFeat
+image_path: data/raw/microalgae_v1/single_cell_images
+data_index_path: data/processed/microalgae_v1/views/timepoint_512/index.csv
+embedding_path: data/processed/microalgae_v1/views/timepoint_512/embedding_genes.csv
+augment_train: true
+normalize: false
+base_condition_dim: 476
+use_msa: false
+pairing_mode: batch_random

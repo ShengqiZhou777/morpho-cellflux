@@ -10,13 +10,13 @@ provenance or reproducibility evidence.
 Use these paths for current work:
 
 ```text
-configs/microalgae_timepoint_512_62d.yaml
+configs/microalgae_timepoint_512_genes.yaml
 configs/microalgae_timepoint_512.yaml
 configs/microalgae_field.yaml
 configs/microalgae_smoke.yaml
 configs/synthetic_validation.yaml
 scripts/build_microalgae_dataset.py
-scripts/interpolate_omics_to_timepoints.py
+scripts/build_gene_condition.py
 scripts/build_field_metadata.py
 scripts/build_field_dataset.py
 scripts/build_smoke_fixture.py

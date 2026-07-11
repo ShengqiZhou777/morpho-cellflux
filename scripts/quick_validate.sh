@@ -2,7 +2,7 @@
 # Quick 1-GPU sanity run for the active Morpho-CellFlux timepoint path.
 #
 # Active configs (512px timepoint view):
-#   microalgae_timepoint_512_62d   (primary, 62d omics condition)   <- default
+#   microalgae_timepoint_512_genes   (primary, 476-dim gene/protein condition)   <- default
 #   microalgae_timepoint_512       (4d baseline, ablation counterpart)
 #
 # Usage:
@@ -13,12 +13,12 @@ set -euo pipefail
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$PROJECT_DIR"
 
-CONFIG="${1:-microalgae_timepoint_512_62d}"
+CONFIG="${1:-microalgae_timepoint_512_genes}"
 case "$CONFIG" in
-    microalgae_timepoint_512_62d) EMBEDDING="embedding_62d.csv" ;;
+    microalgae_timepoint_512_genes) EMBEDDING="embedding_genes.csv" ;;
     microalgae_timepoint_512)     EMBEDDING="embedding.csv" ;;
     *)
-        echo "Active timepoint configs: microalgae_timepoint_512_62d | microalgae_timepoint_512. Got: $CONFIG" >&2
+        echo "Active timepoint configs: microalgae_timepoint_512_genes | microalgae_timepoint_512. Got: $CONFIG" >&2
         exit 2
         ;;
 esac
@@ -42,8 +42,8 @@ fi
 
 if [[ ! -f "$VIEW_DIR/$EMBEDDING" ]]; then
     echo "Missing embedding for $CONFIG: $VIEW_DIR/$EMBEDDING" >&2
-    if [[ "$EMBEDDING" == "embedding_62d.csv" ]]; then
-        echo "Build it with: python scripts/interpolate_omics_to_timepoints.py" >&2
+    if [[ "$EMBEDDING" == "embedding_genes.csv" ]]; then
+        echo "Build it with: python scripts/build_gene_condition.py" >&2
     fi
     exit 1
 fi

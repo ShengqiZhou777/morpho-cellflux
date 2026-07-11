@@ -1,10 +1,10 @@
 # Config Index
 
-Single active training path points to the **62-dimensional omics-enriched
+Single active training path points to the **476-dim raw gene/protein
 timepoint** config. Everything else is a baseline, a lane, or infra.
 
 ```text
-Primary → microalgae_timepoint_512_62d   (Stage-2 omics, current focus)
+Primary → microalgae_timepoint_512_genes   (Stage-2 omics, current focus)
 Baseline → microalgae_timepoint_512      (4d, ablation counterpart)
 Field    → microalgae_field              (whole-field lane, active 2nd path)
 Smoke    → microalgae_smoke              (CPU repo-local validation)
@@ -17,24 +17,24 @@ Archived 4d variants live under `archive/legacy_configs_2026_07/`
 
 ---
 
-## Primary — `microalgae_timepoint_512_62d.yaml`
+## Primary — `microalgae_timepoint_512_genes.yaml`
 
-62d omics condition on the 512px single-cell timepoint view. Addresses the
+476-dim gene/protein condition on the 512px single-cell timepoint view. Addresses the
 identity-mapping collapse by giving the model a stronger condition signal.
 
 ```text
 image_path:      data/raw/microalgae_v1/single_cell_images
 data_index_path: data/processed/microalgae_v1/views/timepoint_512/index.csv
-embedding_path:  data/processed/microalgae_v1/views/timepoint_512/embedding_62d.csv
-base_condition_dim: 62      # 2 light/dark + 1 time_norm + 1 time_bin_h + 29 RNA PCA + 29 Protein PCA
+embedding_path:  data/processed/microalgae_v1/views/timepoint_512/embedding_genes.csv
+base_condition_dim: 476     # 2 light/dark + 1 time_norm + 1 time_bin_h + 372 genes + 100 proteins
 ```
 
-Build the 62d embedding, then quick-validate / train:
+Build the gene embedding, then quick-validate / train:
 
 ```bash
-python scripts/interpolate_omics_to_timepoints.py      # -> embedding_62d.csv
-bash scripts/quick_validate.sh microalgae_timepoint_512_62d
-CONFIG=microalgae_timepoint_512_62d DATASET=phenoflux bash scripts/train.sh
+python scripts/build_gene_condition.py      # -> embedding_genes.csv
+bash scripts/quick_validate.sh microalgae_timepoint_512_genes
+CONFIG=microalgae_timepoint_512_genes DATASET=phenoflux bash scripts/train.sh
 ```
 
 ## Baseline — `microalgae_timepoint_512.yaml`
