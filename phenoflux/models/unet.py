@@ -425,6 +425,8 @@ class QKVAttention(nn.Module):
         return count_flops_attn(model, _x, y)
 
 
+
+
 @dataclass(eq=False)
 class UNetModel(nn.Module):
     """
@@ -476,14 +478,8 @@ class UNetModel(nn.Module):
     with_fourier_features: bool = False
     ignore_time: bool = False
     input_projection: bool = True
-    condition_dim: int = 1224 # 1225 for cpg000, 1024 for bbbc021, 200 for rxrx1
-
-    # --- PhenoFlux MSA/PCD modules (Diet marker profile conditioning) ---
-    use_msa: bool = False              # Marker Self-Attention for marker co-regulation
-    use_pcd: bool = False              # Per-Channel Decoder for per-channel modulation
-    msa_output_dim: int = 64          # MSA context vector dimension
-    msa_n_markers: int = 18           # number of marker channels
-    base_condition_dim: int = 0       # one-hot dim before MSA concat (3 for diet)
+    condition_dim: int = 1224  # Set by config (61 for microalgae, 92 for field, 1224/1024/200 for cpg/bbbc/rxrx)
+    base_condition_dim: int = 0  # Same as condition_dim for microalgae (no MSA concat)
 
     image_size: int = -1  # not used...
     _target_: str = "lib.models.gd_unet.UNetModel"
@@ -615,25 +611,6 @@ class UNetModel(nn.Module):
         )
         self._feature_size += ch
 
-        # --- PhenoFlux MSA/PCD modules for marker profile conditioning ---
-        self.msa = None
-        self.pcd = None
-        if self.use_msa:
-            from phenoflux.models.msa import MarkerSelfAttention
-            self.msa = MarkerSelfAttention(
-                n_markers=self.msa_n_markers,
-                d_model=64,
-                output_dim=self.msa_output_dim,
-                condition_dim=self.base_condition_dim,
-            )
-        if self.use_pcd:
-            from phenoflux.models.pcd import PerChannelDecoder
-            self.pcd = PerChannelDecoder(
-                msa_dim=self.msa_output_dim,
-                cond_dim=self.base_condition_dim,
-                out_channels=self.out_channels,
-            )
-
         self.output_blocks = nn.ModuleList([])
         for level, mult in list(enumerate(self.channel_mult))[::-1]:
             for i in range(self.num_res_blocks + 1):
@@ -695,7 +672,7 @@ class UNetModel(nn.Module):
         Apply the model to an input batch.
         :param x: an [N x C x ...] Tensor of inputs.
         :param timesteps: a 1-D batch of timesteps.
-        :param y: an [N] Tensor of labels, if class-conditional.
+        :param extra: dict with optional 'concat_conditioning' and 'label' keys.
         :return: an [N x C x ...] Tensor of outputs.
         """
         if self.with_fourier_features:
@@ -724,40 +701,8 @@ class UNetModel(nn.Module):
 
         h = x
 
-        # --- MSA/PCD: process marker profile if available ---
-        pcd_modulation = None  # (scale, bias) tuple for PCD
+        # Add condition embedding to time embedding
         cond = extra.get("concat_conditioning", None)
-
-        if "marker_profile" in extra:
-            mp = extra["marker_profile"]
-            if self.use_msa and self.msa is not None:
-                # Extract base condition (one-hot part) for MSA condition gate
-                base_cond = cond if cond is not None else torch.zeros(
-                    mp.shape[0], self.base_condition_dim, device=mp.device, dtype=mp.dtype)
-                if base_cond.shape[1] > self.base_condition_dim:
-                    base_cond = base_cond[:, :self.base_condition_dim]
-                msa_out = self.msa(mp, base_cond)
-                # Concatenate MSA output to condition vector
-                cond = torch.cat([cond, msa_out], dim=1) if cond is not None else msa_out
-                # Pre-compute PCD modulation
-                if self.use_pcd and self.pcd is not None:
-                    pcd_modulation = self.pcd(msa_out, base_cond)
-            else:
-                # Naive concat path (diet_id_18ch): pool marker profile [B,18,H,W] -> [B,18]
-                mp_pooled = mp.mean(dim=[2, 3])
-                cond = torch.cat([cond, mp_pooled], dim=1) if cond is not None else mp_pooled
-
-        # Pad condition when MSA is enabled but marker_profile is absent (CFG dropout).
-        # Without this, a 3-dim diet one-hot would fail against condition_dim=67.
-        if self.use_msa and self.msa is not None and cond is not None:
-            expected_dim = self.base_condition_dim + self.msa_output_dim
-            if cond.shape[1] < expected_dim:
-                pad = torch.zeros(
-                    cond.shape[0], expected_dim - cond.shape[1],
-                    device=cond.device, dtype=cond.dtype,
-                )
-                cond = torch.cat([cond, pad], dim=1)
-
         if cond is not None:
             mol_embedding = self.mol_embed_transform(cond)
             emb = emb + mol_embedding
@@ -773,11 +718,6 @@ class UNetModel(nn.Module):
 
         h = h.type(x.dtype)
         result = self.out(h)
-
-        # Apply PCD per-channel modulation
-        if pcd_modulation is not None:
-            scale, bias = pcd_modulation
-            result = result * (1.0 + scale) + bias
 
         return result
 

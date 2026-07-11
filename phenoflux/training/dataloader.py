@@ -98,7 +98,7 @@ class CellDataset:
         # Initialize embeddings
         self.initialize_embeddings()
 
-        return_full_profile = getattr(args, "use_marker_profile", False)
+        return_full_profile = False  # Microalgae: no marker profile needed
 
         # Pairing strategy configured via CellDatasetFold params (ADR-002)
         # _load_pairing_json and _load_cluster_map handle the loading
@@ -194,8 +194,8 @@ class CellDataset:
                     assert not self.add_controls, "Controls are not supported for cpg0000 dataset."
                     dataset_splits[fold_name]["trt_idx"] = (dataset_splits[fold_name]["STATE"] == "trt")
                     dataset_splits[fold_name]["ctrl_idx"] = (dataset_splits[fold_name]["STATE"] == "control")
-                elif self.dataset_name == "perturbmulti":
-                    assert not self.add_controls, "Controls are not supported for perturbmulti dataset."
+                elif self.dataset_name in {"microalgae", "microalgae_field"}:
+                    assert not self.add_controls, "Controls are not supported for paired cell-state datasets."
                     dataset_splits[fold_name]["trt_idx"] = (dataset_splits[fold_name]["ANNOT"] == "treated")
                     dataset_splits[fold_name]["ctrl_idx"] = (dataset_splits[fold_name]["ANNOT"] == "negative_control")
         return dataset_splits
@@ -210,7 +210,14 @@ class CellDataset:
                 if self.add_controls:
                     self.mol_names = np.unique(self.fold_datasets["train"][self.cpd_name])
                 else:
-                    self.mol_names = np.unique(self.fold_datasets["train"][self.cpd_name][self.fold_datasets["train"]["trt_idx"]])
+                    if self.dataset_name in {"microalgae", "microalgae_field"}:
+                        train_mols = self.fold_datasets["train"][self.cpd_name][self.fold_datasets["train"]["trt_idx"]]
+                        test_mols = self.fold_datasets["test"][self.cpd_name][self.fold_datasets["test"]["trt_idx"]]
+                        self.mol_names = np.unique(np.concatenate([train_mols, test_mols]))
+                    else:
+                        self.mol_names = np.unique(
+                            self.fold_datasets["train"][self.cpd_name][self.fold_datasets["train"]["trt_idx"]]
+                        )
                 self.n_mol = len(self.mol_names)
             else:
                 self.mol_names = {}
@@ -421,8 +428,6 @@ class CellDatasetFold(Dataset):
                                    self.multimodal,
                                    self.batch,
                                    self.iter_ctrl,
-                                   self.channels,
-                                   self.return_full_profile,
                                    self.pairing_mode,
                                    self.precomputed_pairing,
                                    self.cluster_map,

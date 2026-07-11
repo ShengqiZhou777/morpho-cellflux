@@ -1,7 +1,7 @@
 [project]
 name = "morpho-cellflux"
 version = "0.1.0"
-description = "CellFlux-style conditional marker phenotype transport for Perturb-Multi hepatocyte images."
+description = "Flow-matching conditional phenotype transport for FusionODE microalgae microscopy."
 readme = "README.md"
 requires-python = ">=3.10"
 license = {file = "LICENSE"}

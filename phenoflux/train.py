@@ -105,7 +105,7 @@ def main(args):
 
     logger.info(f"Initializing Dataset: {args.dataset}")
     transform_train = get_train_transform()
-    valid_datasets = ['phenoflux']
+    valid_datasets = ['phenoflux', 'phenoflux_small', 'phenoflux_medium']
     if args.dataset in valid_datasets:
         args.num_tasks = get_world_size()
         num_tasks = args.num_tasks
@@ -140,13 +140,46 @@ def main(args):
     logger.info(f"Effective batch size: {eff_batch_size}")
 
     if args.distributed:
+        # find_unused_parameters=True is required: CFG dropout (train_loop.py:151,
+        # class_drop_prob) passes conditioning={} on ~20% of steps, which skips
+        # mol_embed_transform (unet.py:706) — making it an unused parameter that
+        # step. Setting False would crash DDP on the first dropout step.
+        # The per-step autograd-graph traversal overhead is the cost of CFG.
         model = torch.nn.parallel.DistributedDataParallel(
             model, device_ids=[args.gpu], find_unused_parameters=True
         )
         model_without_ddp = model.module
 
+    # Build parameter groups: p_mean_shifts gets 50x LR to compensate for
+    # the weak gradient signal through the sampling chain (loss -> x_t -> t -> sigma -> P_mean).
+    # velocity_bias_proj and regular params use the base LR.
+    p_mean_shift_params = []
+    velocity_bias_params = []
+    other_params = []
+    for name, param in model_without_ddp.named_parameters():
+        if not param.requires_grad:
+            continue
+        if 'p_mean_shifts' in name:
+            p_mean_shift_params.append(param)
+        elif 'velocity_bias_proj' in name:
+            velocity_bias_params.append(param)
+        else:
+            other_params.append(param)
+
+    param_groups = []
+    if other_params:
+        param_groups.append({'params': other_params, 'lr': args.lr})
+    if velocity_bias_params:
+        param_groups.append({'params': velocity_bias_params, 'lr': args.lr})
+    if p_mean_shift_params:
+        p_mean_shift_lr = args.lr * 500.0
+        param_groups.append({'params': p_mean_shift_params, 'lr': p_mean_shift_lr})
+        logger.info(f'p_mean_shifts LR boost: {args.lr:.2e} -> {p_mean_shift_lr:.2e} (500x)')
+
     optimizer = torch.optim.AdamW(
-        model_without_ddp.parameters(), lr=args.lr, betas=args.optimizer_betas
+        param_groups if param_groups else model_without_ddp.parameters(),
+        lr=args.lr,
+        betas=args.optimizer_betas,
     )
     if args.decay_lr:
         lr_schedule = torch.optim.lr_scheduler.LinearLR(

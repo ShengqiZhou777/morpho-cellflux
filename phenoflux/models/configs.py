@@ -5,11 +5,7 @@
 # LICENSE file in the root directory of this source tree.
 """PhenoFlux model registry.
 
-One UNet body, configurable molecular prior modules (dataset-agnostic):
-  MSA (Marker Self-Attention) + PCD (Per-Channel Decoder)
-
-Architecture:      phenoflux  (the only MODEL_CONFIGS entry)
-Molecular priors:  set via YAML config flags (use_msa, use_pcd, use_marker_profile)
+Simplified UNet for RGB microalgae data (no molecular priors).
 """
 
 from typing import Union
@@ -40,25 +36,25 @@ _SHARED_UNET = {
     "with_fourier_features": False,
 }
 
+_SMALL_UNET = {**_SHARED_UNET, "model_channels": 64, "num_res_blocks": 2, "channel_mult": [1, 2, 2]}
+_MEDIUM_UNET = {**_SHARED_UNET, "model_channels": 96, "num_res_blocks": 3, "channel_mult": [1, 2, 2]}
+
 MODEL_CONFIGS = {
     "phenoflux": {
         **_SHARED_UNET,
-        # ── Molecular prior flags (overridden by YAML config) ──
-        "base_condition_dim": 0,   # one-hot dim: 3 (diet) or 40 (crispr)
-        # Molecular priors (MSA + PCD operate on 18ch MERFISH profiles)
-        "use_msa": False,          # Marker Self-Attention → +64 dims
-        "use_pcd": False,          # Per-Channel Decoder (requires MSA)
-        "use_marker_profile": False,  # naive 18ch concat → +18 dims (info control)
-        "msa_output_dim": 64,
-        # condition_dim is computed automatically below
+        "base_condition_dim": 0,
+        "condition_dim": 0,
     },
-}
-
-
-# Molecular prior keys that can be overridden by YAML config
-_MOLECULAR_PRIOR_KEYS = {
-    "base_condition_dim", "use_msa", "use_pcd", "use_marker_profile",
-    "msa_output_dim",
+    "phenoflux_medium": {
+        **_MEDIUM_UNET,
+        "base_condition_dim": 0,
+        "condition_dim": 0,
+    },
+    "phenoflux_small": {
+        **_SMALL_UNET,
+        "base_condition_dim": 0,
+        "condition_dim": 0,
+    },
 }
 
 
@@ -74,31 +70,19 @@ def instantiate_model(
 
     config = dict(MODEL_CONFIGS[architechture])  # copy — don't mutate the shared dict
 
-    # ── Apply YAML overrides for molecular prior flags ──
+    # ── Apply YAML overrides ──
     if overrides:
-        for key in _MOLECULAR_PRIOR_KEYS:
+        for key in {"base_condition_dim"}:
             if key in overrides:
                 config[key] = overrides[key]
 
-    # ── Compute condition_dim from molecular prior flags ──
-    condition_dim = config["base_condition_dim"]
-    if config["use_msa"]:
-        condition_dim += config["msa_output_dim"]
-    elif config["use_marker_profile"]:
-        condition_dim += 18  # naive concat of 18ch marker means
-    config["condition_dim"] = condition_dim
+    # ── Compute condition_dim ──
+    config["condition_dim"] = config["base_condition_dim"]
 
     if is_discrete:
         model = DiscreteUNetModel(vocab_size=257, **config)
     else:
-        # Filter out keys that are NOT UNetModel dataclass fields.
-        # Stored as model attributes for train/eval loop detection.
-        _NON_UNET_KEYS = {"use_marker_profile"}
-        unet_config = {k: v for k, v in config.items() if k not in _NON_UNET_KEYS}
-        model = UNetModel(**unet_config)
-        for key in _NON_UNET_KEYS:
-            if config.get(key):
-                setattr(model, key, True)
+        model = UNetModel(**config)
 
     if use_ema:
         return EMA(model=model)
