@@ -1,4 +1,10 @@
-## ADDED Requirements
+# repo-structure Specification
+
+## Purpose
+
+Define the converged contract for the PhenoFlux repository after migration to the microalgae era: a committed microalgae baseline, generated data excluded from version control, a single documented active training path, a single source of truth for the conditioning dimension, and isolation of historical and scratch material. This capability governs repository structure and hygiene only; it does not alter training, inference, or evaluation runtime behavior.
+
+## Requirements
 
 ### Requirement: Committed microalgae baseline
 The repository HEAD SHALL reflect the microalgae era. The full migration from the CRISPR/Diet era SHALL be committed as a set of reviewable logical commits, so that `git diff` against HEAD reflects microalgae-internal changes rather than the CRISPR-era baseline.
