@@ -43,7 +43,7 @@
 
 ## 6. 收尾验证
 
-- [ ] 6.1 退役过时规划文档：`docs/CLEANUP_PLAN.md`、`ACTION_PLAN.md` 顶部加"RETIRED / superseded by converge-microalgae-repo"标注或移入 experiments 目录
-- [ ] 6.2 更新 `CLAUDE.md` 项目结构章节，使之反映收敛后的真实布局
-- [ ] 6.3 `openspec validate converge-microalgae-repo --strict` 通过
-- [ ] 6.4 最终验证：`git status` 干净；`README → docs/DATA → configs/README → scripts/train.sh` 路径链完整可走通
+- [x] 6.1 退役过时规划文档：`docs/CLEANUP_PLAN.md` 顶部加 RETIRED banner；`ACTION_PLAN.md` 已在 Phase 3 移入 experiments 目录
+- [x] 6.2 更新文档真相：`CLAUDE.md`（结构/Datasets/Quick Start/eval/build 脚本名/维度）、`README.md`（路径链指向 62d 主路径）、`docs/DATA.md`（512/62d 主视图）、`docs/LEGACY.md`（活跃清单）全部对齐收敛后布局
+- [x] 6.3 `openspec validate converge-microalgae-repo --strict` 通过
+- [x] 6.4 最终验证：`git status` 干净；`README → docs/DATA → configs/README → scripts/train.sh` 路径链完整可走通；`git gc` 清理松散对象

@@ -1,5 +1,11 @@
 # Repository Convergence Plan
 
+> **RETIRED (2026-07-11)** — This documents the 2026-07-05 convergence pass and is
+> kept for provenance only. It has been superseded by the openspec change
+> `converge-microalgae-repo`. Do not treat the paths/configs below as current;
+> see `README.md`, `docs/DATA.md`, `configs/README.md`, and `CLAUDE.md` for the
+> converged state.
+
 Goal: make the current microalgae project easy to run and reason about while
 keeping small historical provenance material archived.
 

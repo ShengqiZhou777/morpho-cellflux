@@ -31,9 +31,11 @@ phenoflux/                    # Python package
 │   └── edm_time.py           # EDM time discretization
 └── eval/
     ├── fid.py                # FIDo/c, KIDo/c
-    └── aggregate.py          # Phenotypic metrics
+    ├── morphology.py         # Morphology feature extraction
+    ├── distribution_eval.py  # Distribution-level (population) evaluation
+    └── aggregate_microalgae.py  # Phenotypic metrics aggregation
 
-configs/                      # 2 active configs (microalgae)
+configs/                      # 5 active configs (see configs/README.md)
 scripts/                      # Microalgae data building scripts
 outputs/                      # Training outputs (gitignored)
 archive_crispr_diet_2026_07_04/  # Archived materials (gitignored)
@@ -45,23 +47,20 @@ archive_crispr_diet_2026_07_04/  # Archived materials (gitignored)
 
 Two granularity levels for microalgae phenotype generation:
 
-#### 1. Single-Cell Level (`microalgae_base.yaml`)
-- **Images**: RGB crops from FusionODE (128×128, 3 channels)
-- **Image source**: `../../FusionODE/data/CROPS_RAW_SCALE`
-- **Condition**: 61-dimensional embedding
-  - Time point (0-72h)
-  - Mean RNA PCA components
-  - Mean protein PCA components
-- **Data index**: `data/processed/index.csv` (~38M, ~214K cell pairs)
+#### 1. Single-Cell Level (`microalgae_timepoint_512_62d.yaml`, primary)
+- **Images**: RGB crops (512×512, 3 channels)
+- **Image source**: `data/raw/microalgae_v1/single_cell_images`
+- **Condition**: 62-dim embedding = 2 light/dark + 1 time_norm + 1 time_bin_h + 29 RNA PCA + 29 Protein PCA (z-scored)
+- **Data index**: `data/processed/microalgae_v1/views/timepoint_512/index.csv`
+- **Embedding**: `data/processed/microalgae_v1/views/timepoint_512/embedding_62d.csv`
+- **4d baseline**: `microalgae_timepoint_512.yaml` (same view, no omics — ablation counterpart)
 - **Use case**: Cell-level phenotype prediction
 
-#### 2. Field-Level (`microalgae_field_base.yaml`)
-- **Images**: Raw microscopy fields from FusionODE (variable size, 3 channels)
-- **Image source**: `../../FusionODE/data/TIMECOURSE`
-- **Condition**: 92-dimensional embedding
-  - Field morphology statistics (mean/std of area, circularity, aspect_ratio, etc.)
-  - Aligned state-level omics PCs
-- **Data index**: `data/processed/field_index.csv` (1.8M, ~5.3K field pairs)
+#### 2. Field-Level (`microalgae_field.yaml`)
+- **Images**: Whole microscopy fields (3 channels)
+- **Image source**: `data/raw/microalgae_v1/field_images`
+- **Condition**: 34-dim embedding (field morphology statistics + aligned omics PCs)
+- **Data index**: `data/processed/microalgae_v1/views/field/index.csv`
 - **Use case**: Field-level phenotype prediction (closer to acquisition unit)
 
 ### Data Pairing Strategy
@@ -88,7 +87,7 @@ Input (3ch RGB) → UNet Encoder → Condition Embedding + Time Embedding
 - `out_channels`: 3 (RGB)
 - `model_channels`: 128
 - `base_condition_dim`: config-dependent
-  - **Base configs** (`microalgae_timepoint*`, `microalgae_smoke`): 4 dims — `light/dark/time_norm/time_bin_h`.
+  - **Base configs** (`microalgae_timepoint_512`, `microalgae_smoke`): 4 dims — `light/dark/time_norm/time_bin_h`.
   - **Omics-enriched config** (`microalgae_timepoint_512_62d`): 62 dims — 4 base + 29 RNA PCA + 29 Protein PCA (z-scored), built by `scripts/interpolate_omics_to_timepoints.py` → `embedding_62d.csv`. This is the Stage-2 condition that addresses the identity-mapping collapse.
   - The embedding CSV carries a `timegroup_key` index column that the dataloader drops (`index_col=0`), so 63 CSV columns → 62 feature dims.
 - `condition_dim`: Same as `base_condition_dim` (no molecular prior concat)
@@ -104,21 +103,21 @@ Input (3ch RGB) → UNet Encoder → Condition Embedding + Time Embedding
 ### Quick Start
 
 ```bash
-# Single-cell level (small subset for validation)
-torchrun --standalone --nproc_per_node=2 -m phenoflux.train \
-  --dataset phenoflux --config microalgae_base \
-  --batch_size 32 --epochs 20 --use_initial 1 --cfg_scale 0.2 \
-  --use_ema --skewed_timesteps --class_drop_prob 0.2 \
-  --eval_frequency 5 --fid_samples 512 --compute_fid \
-  --output_dir outputs/runs/microalgae/cell_level_v1
+# CPU smoke (no external data, validates dataloader+model path)
+make smoke
 
-# Field-level
-torchrun --standalone --nproc_per_node=2 -m phenoflux.train \
-  --dataset phenoflux --config microalgae_field_base \
-  --batch_size 16 --epochs 20 --use_initial 1 --cfg_scale 0.2 \
-  --use_ema --skewed_timesteps --class_drop_prob 0.2 \
-  --eval_frequency 5 --fid_samples 512 --compute_fid \
-  --output_dir outputs/runs/microalgae/field_level_v1
+# Build the 62d omics condition embedding for the primary path
+make interpolate
+
+# 1-GPU quick sanity run of the primary 62d config
+make quick
+
+# Full training of the primary 62d config (1x RTX 4090)
+make train
+
+# Baseline / overrides (scripts/train.sh is env-var parameterized):
+CONFIG=microalgae_timepoint_512 BATCH=16 EPOCHS=40 bash scripts/train.sh   # 4d ablation
+CONFIG=microalgae_field DATASET=phenoflux bash scripts/train.sh            # field lane
 ```
 
 ### Key Training Flags
@@ -144,20 +143,20 @@ python phenoflux/eval/fid.py \
 
 ### Biological Metrics
 ```bash
-python phenoflux/eval/aggregate.py <eval_dir> 5 <epoch>
+python phenoflux/eval/aggregate_microalgae.py <run_dir> 5 <epoch>
 ```
 
 ## Data Building Scripts
 
 ```bash
-# Build single-cell generation data
-python scripts/build_microalgae_generation_data.py
+# Build single-cell (timepoint) + field processed views
+python scripts/build_microalgae_dataset.py --version microalgae_v1 --views timepoint,field
 
-# Build field-level generation data
-python scripts/build_microalgae_field_generation_data.py
+# Build the 62d omics condition embedding for the primary path
+python scripts/interpolate_omics_to_timepoints.py
 
-# Build field metadata (EXIF + morphology summaries)
-python scripts/build_microalgae_field_metadata.py
+# Build field metadata (EXIF + morphology summaries) only
+python scripts/build_field_metadata.py
 ```
 
 ## Critical Design Notes

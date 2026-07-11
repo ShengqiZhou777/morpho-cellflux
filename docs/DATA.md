@@ -13,6 +13,12 @@ The timepoint view is the single-cell crop lane. The field view is the
 whole-field simulator-like lane with metadata, masks, targets, and prompts for
 annotation-enhancement work.
 
+> **Primary training view (Stage 2):** the current primary path uses the 512px
+> single-cell view `microalgae_v1/views/timepoint_512/` with a 62-dim
+> omics-enriched condition (`embedding_62d.csv`, built by
+> `scripts/interpolate_omics_to_timepoints.py`). The 128px `timepoint` view below
+> remains the base builder output; see `configs/README.md` for the active config set.
+
 ## Raw Data
 
 The project has one raw root:
