@@ -7,7 +7,7 @@ Input:
   - data/processed/microalgae_v1/views/timepoint_512/embedding.csv (105 rows: timegroup bins)
 
 Output:
-  - data/processed/microalgae_v1/views/timepoint_512/embedding_61d.csv (105 rows, 61 dims)
+  - data/processed/microalgae_v1/views/timepoint_512/embedding_62d.csv (105 rows, 62 dims)
     Columns: timegroup_key, cond_light, cond_dark, time_norm, time_bin_h,
              rna_pca_0...28, prot_pca_0...28
 """
@@ -68,12 +68,12 @@ def main():
     light_interp = build_interpolators(light_avg, rna_pca_cols + prot_pca_cols)
 
     # Interpolate for each timegroup bin
-    embedding_61d = embedding_4d.copy()
+    embedding_62d = embedding_4d.copy()
 
     for col in rna_pca_cols + prot_pca_cols:
-        embedding_61d[col] = np.nan
+        embedding_62d[col] = np.nan
 
-    for idx, row in embedding_61d.iterrows():
+    for idx, row in embedding_62d.iterrows():
         time_h = row['time_bin_h']
         is_light = row['cond_light'] == 1.0
 
@@ -82,7 +82,7 @@ def main():
 
         # Interpolate each PCA dimension
         for col in rna_pca_cols + prot_pca_cols:
-            embedding_61d.at[idx, col] = float(interp_dict[col](time_h))
+            embedding_62d.at[idx, col] = float(interp_dict[col](time_h))
 
     # Reorder columns: metadata first, then RNA PCA, then Protein PCA
     # ── Normalize PCA columns to z-score ──────────────────────────
@@ -91,43 +91,43 @@ def main():
     # layer to be dominated by PCA noise, pushing the model back to identity
     # mapping. Z-score each PCA column to mean=0, std=1 (~same scale as base dims).
     pca_cols = rna_pca_cols + prot_pca_cols
-    pca_mean = embedding_61d[pca_cols].mean()
-    pca_std = embedding_61d[pca_cols].std().replace(0.0, 1.0)  # avoid div-by-zero
+    pca_mean = embedding_62d[pca_cols].mean()
+    pca_std = embedding_62d[pca_cols].std().replace(0.0, 1.0)  # avoid div-by-zero
 
-    embedding_61d[pca_cols] = (embedding_61d[pca_cols] - pca_mean) / pca_std
+    embedding_62d[pca_cols] = (embedding_62d[pca_cols] - pca_mean) / pca_std
 
     # Persist normalization stats for inference-time reuse
-    stats_path = 'data/processed/microalgae_v1/views/timepoint_512/embedding_61d_stats.csv'
+    stats_path = 'data/processed/microalgae_v1/views/timepoint_512/embedding_62d_stats.csv'
     stats_df = pd.DataFrame({'mean': pca_mean, 'std': pca_std})
     stats_df.to_csv(stats_path)
     print(f"\n=== Normalization ===")
     print(f"PCA z-scored to mean=0, std=1")
-    print(f"After norm: min={embedding_61d[pca_cols].min().min():.2f}, max={embedding_61d[pca_cols].max().max():.2f}")
+    print(f"After norm: min={embedding_62d[pca_cols].min().min():.2f}, max={embedding_62d[pca_cols].max().max():.2f}")
     print(f"Stats saved: {stats_path}")
 
     # Reorder columns: metadata first, then RNA PCA, then Protein PCA
     col_order = ['timegroup_key', 'cond_light', 'cond_dark', 'time_norm', 'time_bin_h'] + \
                 rna_pca_cols + prot_pca_cols
-    embedding_61d = embedding_61d[col_order]
+    embedding_62d = embedding_62d[col_order]
 
     # Save
-    out_path = 'data/processed/microalgae_v1/views/timepoint_512/embedding_61d.csv'
-    embedding_61d.to_csv(out_path, index=False)
+    out_path = 'data/processed/microalgae_v1/views/timepoint_512/embedding_62d.csv'
+    embedding_62d.to_csv(out_path, index=False)
 
     print(f"\n=== Output ===")
     print(f"Saved: {out_path}")
-    print(f"Shape: {embedding_61d.shape}")
-    print(f"Columns: {list(embedding_61d.columns[:8])} ... {list(embedding_61d.columns[-3:])}")
+    print(f"Shape: {embedding_62d.shape}")
+    print(f"Columns: {list(embedding_62d.columns[:8])} ... {list(embedding_62d.columns[-3:])}")
     print(f"\nFirst 3 rows (first 10 cols):")
-    print(embedding_61d.iloc[:3, :10])
+    print(embedding_62d.iloc[:3, :10])
 
     # Sanity check: verify interpolation at known timepoints
     # (de-normalize interpolated value back to raw scale for comparison)
     print(f"\n=== Sanity Check (de-normalized) ===")
     for time in [0.0, 1.0, 3.0, 6.0, 24.0]:
         # Find closest timegroup bin
-        closest_idx = (embedding_61d['time_bin_h'] - time).abs().idxmin()
-        closest_row = embedding_61d.loc[closest_idx]
+        closest_idx = (embedding_62d['time_bin_h'] - time).abs().idxmin()
+        closest_row = embedding_62d.loc[closest_idx]
 
         # Compare with original PCA value
         cond = 'Dark' if closest_row['cond_dark'] == 1.0 else 'Light'

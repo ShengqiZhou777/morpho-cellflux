@@ -19,7 +19,7 @@ modality_list:
   - BioFeat
 image_path: data/raw/microalgae_v1/single_cell_images
 data_index_path: data/processed/microalgae_v1/views/timepoint_512/index.csv
-embedding_path: data/processed/microalgae_v1/views/timepoint_512/embedding_61d.csv
+embedding_path: data/processed/microalgae_v1/views/timepoint_512/embedding_62d.csv
 augment_train: true
 normalize: false
 base_condition_dim: 62

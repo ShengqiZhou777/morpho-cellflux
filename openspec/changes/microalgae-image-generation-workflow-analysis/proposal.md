@@ -1,5 +1,7 @@
 # 微藻图像生成工作流程分析
 
+> **维度更正 (2026-07-11, converge-microalgae-repo)**：本文多处写的组学条件 "61维/92维" 为早期目标值，已过时。真相：base 配置 4 维；组学增强配置 `microalgae_timepoint_512_62d` 为 **62 维**（4 base + 29 RNA PCA + 29 Protein PCA，z-score 归一化，CSV 含 `timegroup_key` 索引列被 dataloader 丢弃）；field lane 为 34 维。以 `configs/` + `CLAUDE.md` 为准。
+
 ## 概述
 
 PhenoFlux 使用 **Flow Matching + Conditional UNet** 实现微藻表型图像的条件生成，从 control 状态预测 treated 状态的细胞形态变化。
