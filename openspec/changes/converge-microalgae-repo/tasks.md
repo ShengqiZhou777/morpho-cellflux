@@ -26,11 +26,11 @@
 
 ## 4. scripts/ 三分类
 
-- [ ] 4.1 对 28 个脚本逐一 `grep -rn <script>` 全仓（含 CLAUDE.md/README/其他脚本），产出 keep/archive/delete 清单
-- [ ] 4.2 archive：历史 campaign 脚本（convergence/monitor/watch/stage2/ablate 等）移入 `archive/legacy_scripts_2026_07/`
-- [ ] 4.3 delete：确认无引用的纯 scratch 脚本
-- [ ] 4.4 更新残留引用（`scripts/train.sh`、`quick_validate.sh` 等指向已移动脚本的路径）
-- [ ] 4.5 verify：`scripts/` 只剩当前路径需要的脚本，`bash scripts/quick_validate.sh` 引用不断
+- [x] 4.1 对 28 个脚本逐一 `grep -rn <script>` 全仓（含 CLAUDE.md/README/其他脚本），产出 keep/archive/delete 清单
+- [x] 4.2 archive：13 个 campaign 脚本（monitor/watch/generate/convergence/ablation/stage2/quick+subset/processed wrapper）移入 `archive/legacy_scripts_2026_07/`
+- [x] 4.3 保留决策：field lane 3 脚本 + `sample_microalgae_checkpoint.py` + `verify_signal_strength.py` 留在 scripts/（无纯删除项）
+- [x] 4.4 更新残留引用：活跃文件（README/DATA/configs/README/train.sh/quick_validate.sh）无悬空引用，无需改动
+- [x] 4.5 verify：`scripts/` 只剩 14 个活跃/复用脚本，`bash scripts/quick_validate.sh` 引用不断
 
 ## 5. configs/ 收敛
 
