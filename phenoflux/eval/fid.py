@@ -71,6 +71,58 @@ def fid_kid_for_pair(
     return fid_v, float(kid_m.detach().cpu()), float(kid_s.detach().cpu())
 
 
+def fid_kid_stratified(
+    pred_dir_by_strata: dict[str, Path],
+    real_dir_by_strata: dict[str, Path],
+    device: torch.device,
+    cap: int,
+    seed: int = 0,
+) -> dict[str, dict[str, float]]:
+    """Compute FID/KID per stratum (+ a pooled row) for a prediction vs real split.
+
+    Used by distribution_eval to score both `gen vs target` and the identity
+    baseline `control vs target` with matched-N, reusing load_pngs and
+    fid_kid_for_pair. Strata are keyed by directory name (already = timepoint x
+    condition). A stratum is skipped if either folder has fewer than `cap` PNGs.
+
+    Args:
+        pred_dir_by_strata: {stratum: folder of prediction PNGs}.
+        real_dir_by_strata: {stratum: folder of real target PNGs}.
+        device: torch device for the InceptionV3 features.
+        cap: per-stratum sample count (both sides sampled to this many).
+        seed: base RNG seed (real uses seed, pred uses seed+1, as in main()).
+
+    Returns:
+        {stratum: {"fid", "kid", "kid_std", "n"}} plus a "pooled" entry.
+    """
+    out: dict[str, dict[str, float]] = {}
+    real_pool: list[torch.Tensor] = []
+    pred_pool: list[torch.Tensor] = []
+    for stratum in sorted(set(pred_dir_by_strata) & set(real_dir_by_strata)):
+        real_dir, pred_dir = real_dir_by_strata[stratum], pred_dir_by_strata[stratum]
+        n_real = len(sorted(Path(real_dir).glob("*.png")))
+        n_pred = len(sorted(Path(pred_dir).glob("*.png")))
+        stratum_cap = min(cap, n_real, n_pred)
+        if stratum_cap < 2:
+            continue
+        real_t = load_pngs(real_dir, stratum_cap, np.random.default_rng(seed))
+        pred_t = load_pngs(pred_dir, stratum_cap, np.random.default_rng(seed + 1))
+        kid_subset = min(1000, stratum_cap)
+        f, km, ks = fid_kid_for_pair(real_t, pred_t, device, kid_subset)
+        out[stratum] = {"fid": f, "kid": km, "kid_std": ks, "n": stratum_cap}
+        real_pool.append(real_t)
+        pred_pool.append(pred_t)
+
+    if real_pool:
+        real_all = torch.cat(real_pool, 0)
+        pred_all = torch.cat(pred_pool, 0)
+        f, km, ks = fid_kid_for_pair(
+            real_all, pred_all, device, min(1000, real_all.shape[0])
+        )
+        out["pooled"] = {"fid": f, "kid": km, "kid_std": ks, "n": int(real_all.shape[0])}
+    return out
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--real-dir", required=True, help="imagefolder of REAL perturbed images: <cond>/*.png")
