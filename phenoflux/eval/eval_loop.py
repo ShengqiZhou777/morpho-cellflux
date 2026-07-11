@@ -25,7 +25,7 @@ from torchmetrics.image.fid import FrechetInceptionDistance
 from torchvision.utils import save_image
 from phenoflux.training.distributed import is_dist_avail_and_initialized, get_world_size, is_main_process
 from phenoflux.training.edm_time import get_time_discretization
-from phenoflux.data.data_utils import convert_6ch_to_3ch, convert_5ch_to_3ch
+from phenoflux.data.data_utils import convert_6ch_to_3ch, convert_5ch_to_3ch, centered_noise
 logger = logging.getLogger(__name__)
 
 PRINT_FREQUENCY = 50
@@ -156,7 +156,12 @@ def eval_model(
 
         if num_synthetic < fid_samples:
             cfg_scaled_model.reset_nfe_counter()
-            x_0 = x_real_ctrl
+            if use_initial == 1:
+                x_0 = x_real_ctrl
+            elif use_initial == 2:
+                x_0 = x_real_ctrl + torch.randn(x_real_ctrl.shape, dtype=torch.float32, device=device) * args.noise_level
+            else:
+                x_0 = centered_noise(x_real_ctrl.shape, getattr(args, "center_noise_sigma", 0.0), device=device)
 
             if args.edm_schedule:
                 time_grid = get_time_discretization(nfes=ode_opts["nfe"])

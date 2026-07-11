@@ -262,6 +262,31 @@ def get_args_parser():
         action="store_true",
         help="Iterate over control samples or target image",
     )
+    parser.add_argument(
+        "--noise_level",
+        type=float,
+        default=0.2,
+        help="Stddev of noise added to the control image when --use_initial=2.",
+    )
+    parser.add_argument(
+        "--noise_prob",
+        type=float,
+        default=0.5,
+        help="Probability of adding noise to control when --use_initial=2.",
+    )
+    parser.add_argument(
+        "--center_noise_sigma",
+        type=float,
+        default=0.0,
+        help="Center-weighted Gaussian noise envelope for --use_initial=0 "
+             "(normalized [-1,1] coords). 0 = uniform noise; 0.3-0.5 biases toward one centered cell.",
+    )
+    parser.add_argument(
+        "--gan_weight",
+        type=float,
+        default=0.0,
+        help="Weight for the PatchGAN adversarial loss (0 = disabled).",
+    )
 
     # --- Pairing strategy (ADR-002 data-quality improvement) ---
     parser.add_argument(

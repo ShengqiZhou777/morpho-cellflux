@@ -7,20 +7,43 @@ import argparse
 import gc
 import logging
 import math
+import random
 from typing import Iterable
 
 import torch
+import torch.nn as nn
+import torch.nn.functional as F
 from flow_matching.path import CondOTProbPath
 from torch.nn.parallel import DistributedDataParallel
 from torchmetrics.aggregation import MeanMetric
 
 from phenoflux.models.ema import EMA
+from phenoflux.data.data_utils import centered_noise
 from phenoflux.data.dataloader import CellDataLoader
 from phenoflux.training.grad_scaler import NativeScalerWithGradNormCount
 
 logger = logging.getLogger(__name__)
 
 PRINT_FREQUENCY = 50
+
+# --- PatchGAN discriminator (used only when --gan_weight > 0) ---
+_DISCRIMINATOR: nn.Module | None = None
+_DISC_OPTIMIZER: torch.optim.Optimizer | None = None
+
+
+class PatchDiscriminator(nn.Module):
+    """Lightweight PatchGAN with spectral norm for stable adversarial training."""
+    def __init__(self, in_channels=3, base=64):
+        super().__init__()
+        self.net = nn.Sequential(
+            nn.utils.spectral_norm(nn.Conv2d(in_channels, base, 4, 2, 1)), nn.LeakyReLU(0.2, True),
+            nn.utils.spectral_norm(nn.Conv2d(base, base*2, 4, 2, 1)), nn.LeakyReLU(0.2, True),
+            nn.utils.spectral_norm(nn.Conv2d(base*2, base*4, 4, 2, 1)), nn.LeakyReLU(0.2, True),
+            nn.utils.spectral_norm(nn.Conv2d(base*4, 1, 4, 1, 1)),
+        )
+
+    def forward(self, x):
+        return self.net(x)
 
 
 def skewed_timestep_sample(num_samples: int, device: torch.device) -> torch.Tensor:
@@ -77,8 +100,16 @@ def my_train_one_epoch(
         else:
             t = torch.rand(x_real_ctrl.shape[0], device=device)
 
-        # Control-initialized flow (use_initial=1 is the only supported mode).
-        x_0 = x_real_ctrl
+        # Flow start point: 1 = control image, 2 = control + noise, 0 = (centered) noise.
+        if use_initial == 1:
+            x_0 = x_real_ctrl
+        elif use_initial == 2:
+            if random.random() > args.noise_prob:
+                x_0 = x_real_ctrl
+            else:
+                x_0 = x_real_ctrl + torch.randn_like(x_real_ctrl) * args.noise_level
+        else:
+            x_0 = centered_noise(x_real_ctrl.shape, getattr(args, "center_noise_sigma", 0.0), device=device)
         path_sample = path.sample(t=t, x_0=x_0, x_1=x_real_trt)
         x_t = path_sample.x_t
         u_t = path_sample.dx_t
@@ -86,6 +117,33 @@ def my_train_one_epoch(
         with torch.amp.autocast("cuda"):
             pred = model(x_t, t, extra=conditioning)
             loss = torch.pow(pred - u_t, 2).mean()
+
+        # --- GAN adversarial loss (breaks near-identity), enabled by --gan_weight > 0 ---
+        gan_weight = getattr(args, 'gan_weight', 0.0)
+        if gan_weight > 0:
+            global _DISCRIMINATOR, _DISC_OPTIMIZER
+            if data_iter_step == 0 or _DISCRIMINATOR is None:
+                _DISCRIMINATOR = PatchDiscriminator().to(device)
+                _DISC_OPTIMIZER = torch.optim.AdamW(
+                    _DISCRIMINATOR.parameters(), lr=args.lr * 0.1, betas=(0.5, 0.9)
+                )
+            with torch.amp.autocast("cuda"):
+                x_pred_target = x_t + (1.0 - t.view(-1, 1, 1, 1)) * pred
+            update_d = (epoch > 0 or data_iter_step >= 500) and (data_iter_step % 8 == 0)
+            if update_d:
+                with torch.amp.autocast("cuda"):
+                    real_out = _DISCRIMINATOR(x_real_trt)
+                    fake_out = _DISCRIMINATOR(x_pred_target.detach())
+                    d_loss = F.relu(1.0 - real_out).mean() + F.relu(1.0 + fake_out).mean()
+                    _DISC_OPTIMIZER.zero_grad()
+                torch.nn.utils.clip_grad_norm_(_DISCRIMINATOR.parameters(), 0.1)
+                loss_scaler(
+                    d_loss, _DISC_OPTIMIZER, parameters=_DISCRIMINATOR.parameters(), update_grad=True
+                )
+            with torch.amp.autocast("cuda"):
+                fake_out_g = _DISCRIMINATOR(x_pred_target)
+                g_loss = -fake_out_g.mean()
+            loss = loss + gan_weight * g_loss
 
         loss_value = loss.item()
         batch_loss.update(loss)

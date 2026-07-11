@@ -55,6 +55,31 @@ def _load_microalgae_png(image_path, sample_key, image_size=128):
     return _load_microalgae_rgb(image_path, sample_key, image_size=image_size)
 
 
+def centered_noise(shape, sigma, device="cpu"):
+    """Generate noise with a Gaussian spatial envelope centered in the image.
+
+    Args:
+        shape: (B, C, H, W) output shape.
+        sigma: envelope width in normalized [-1,1] coordinates.
+               sigma=0 uniform noise; sigma=0.3-0.5 single centered cell.
+        device: torch device.
+
+    Returns:
+        torch.Tensor of shape ``shape`` in [-1, 1].
+    """
+    if sigma <= 0:
+        return torch.randn(shape, device=device)
+
+    _, _, H, W = shape
+    ys = torch.linspace(-1, 1, H, device=device)
+    xs = torch.linspace(-1, 1, W, device=device)
+    yy, xx = torch.meshgrid(ys, xs, indexing="ij")
+    r2 = yy**2 + xx**2
+    envelope = torch.exp(-r2 / (2 * sigma**2))  # 1 at centre, decays to 0 at corners
+    noise = torch.randn(shape, device=device)
+    return noise * envelope.unsqueeze(0).unsqueeze(0)
+
+
 class CustomTransform:
     """Class for scaling and resizing an input image, with optional augmentation and normalization."""
 
