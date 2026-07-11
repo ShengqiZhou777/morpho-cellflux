@@ -19,10 +19,10 @@
 
 ## 3. 根目录 scratch 归位
 
-- [ ] 3.1 建 `docs/experiments/collapse_campaign_2026_07/`，移入 `ACTION_PLAN.md`、`EXECUTION_LOG.md`、`MONITORING_GUIDE.md`
-- [ ] 3.2 判定 `histo.py`（内容为温度/CN 实验）：`grep -rn 'histo' .` 确认无引用后删除，保留判定记录到 design Open Questions
-- [ ] 3.3 处理 `args.json`、`areaRatio.png`：删除或移入 `data/reports/`
-- [ ] 3.4 verify：仓库根仅剩标准工程文件（README/CLAUDE/LICENSE/Makefile/pyproject/environment.yml/CITATION 等）
+- [x] 3.1 建 `docs/experiments/collapse_campaign_2026_07/`，移入 `ACTION_PLAN.md`、`EXECUTION_LOG.md`、`MONITORING_GUIDE.md`
+- [x] 3.2 判定 `histo.py`（温度/CN 实验，无 phenoflux 引用）：非删除，移入 campaign 文件夹保持 untracked，待用户定夺归属
+- [x] 3.3 处理 `args.json`、`areaRatio.png`：移入 `data/reports/`（gitignored）
+- [x] 3.4 verify：仓库根仅剩标准工程文件（README/CLAUDE/LICENSE/Makefile/pyproject/environment.yml/CITATION 等）
 
 ## 4. scripts/ 三分类
 
