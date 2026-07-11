@@ -210,6 +210,14 @@ def get_args_parser():
         help="Save all samples generated for FID computation.",
     )
     parser.add_argument(
+        "--marker_aux_weight",
+        type=float,
+        default=0.0,
+        help="Weight for auxiliary marker expression loss (0 = disabled). "
+        "Adds MSE between approximated target channel means and ground-truth "
+        "target channel means, encouraging the model to respect marker-level expression.",
+    )
+    parser.add_argument(
         "--early_stop_patience",
         default=0,
         type=int,
@@ -294,6 +302,15 @@ def get_args_parser():
         default=0.5,
     )
     parser.add_argument(
+        "--center_noise_sigma",
+        type=float,
+        default=0.0,
+        help="Standard deviation for center-weighted Gaussian noise envelope "
+             "(in normalized [-1,1] image coordinates). 0 = uniform noise (default). "
+             ">0 enables centered noise for use_initial=0 mode to bias generation "
+             "toward a single centered cell. Suggested: 0.3–0.5.",
+    )
+    parser.add_argument(
         "--foreground_loss",
         action="store_true",
         help="Use foreground-weighted flow-matching MSE for sparse marker crops.",
@@ -315,6 +332,20 @@ def get_args_parser():
         type=float,
         default=0.1,
         help="Loss weight for background pixels when --foreground_loss is enabled.",
+    )
+
+    parser.add_argument(
+        "--morph_loss_weight",
+        type=float,
+        default=0.0,
+        help="Weight for image-feature reconstruction loss on predicted target (0=disabled).",
+    )
+
+    parser.add_argument(
+        "--gan_weight",
+        type=float,
+        default=0.0,
+        help="Weight for GAN adversarial loss (PatchGAN discriminator). 0=disabled.",
     )
 
     # --- Pairing strategy (ADR-002 data-quality improvement) ---

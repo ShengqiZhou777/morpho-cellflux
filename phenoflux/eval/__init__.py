@@ -1,9 +1,25 @@
-"""PhenoFlux evaluation suite.
+"""Microalgae evaluation helpers kept in the active package.
 
-Metrics:
-  FIDo/c, KIDo/c — image quality (fid.py)
-  PGC (Phenotypic Gap Closure) — population distribution gap (aggregate.py)
-  dir-corr       — perturbation direction correlation (aggregate.py)
-  MoA accuracy   — mode-of-action classifier (moa.py)
-  figures        — marker distribution visualization (figures.py)
+Public API:
+  - morphology: per-crop morphology feature extraction (FEATURES, extract_features,
+    extract_population).
+  - distribution_eval: distribution-level evaluation with identity baseline
+    (run_distribution_eval, morphology_metrics).
+
+Note: aggregate_microalgae.py (scalar fg-intensity Wasserstein PGC) is DEPRECATED,
+superseded by distribution_eval, which sees full morphology and guards against
+identity collapse.
 """
+from phenoflux.eval.morphology import FEATURES, extract_features, extract_population
+from phenoflux.eval.distribution_eval import (
+    morphology_metrics,
+    run_distribution_eval,
+)
+
+__all__ = [
+    "FEATURES",
+    "extract_features",
+    "extract_population",
+    "morphology_metrics",
+    "run_distribution_eval",
+]

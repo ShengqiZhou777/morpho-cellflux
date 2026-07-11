@@ -24,8 +24,11 @@ outputs/
 
 data/raw/*
 data/processed/*
+data/smoke/
 data/source/
 data/reports/*.json
+data/reports/*.png
+data/synthetic_validation/
 
 baselines/external/
 
@@ -44,3 +47,8 @@ main_comparison.png
 .coordinator/
 results/
 cache_old_*/
+
+# Archived CRISPR/Diet materials (2026-07-04)
+archive_crispr_diet_2026_07_04/
+# Top-level provenance archive only (anchored) — keeps openspec/changes/archive/ tracked
+/archive/

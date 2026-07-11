@@ -2,80 +2,82 @@ import torch
 import torchvision.transforms as T
 import numpy as np
 from pathlib import Path
-
-# Perturb-Multi hepatocyte multi-pathway panel: channel indices into the
-# 18-channel npz (var order: Alb0, polyT1, rRNA2, M6PR3, CathB4, Perilipin5,
-# Sqstm1 6, LC3b7, TOMM20 8, Calreticulin9, pS6RP10, ...).
-# Legacy fallback panel for configs without an explicit `channels` field.
-# Public configs pin their own panels in YAML.
-PERTURBMULTI_CHANNELS = [5, 9, 10]
-
-# Precomputed per-condition population-mean 18-channel profiles.
-# Used by PhenoFlux MAC/CCM to condition on the TARGET condition's
-# canonical molecular state instead of the individual control cell's
-# profile (which is confounded with per-cell variation in pseudo-paired data).
-_COND_MEAN_PROFILES = None
+from PIL import Image
 
 
-def _load_perturbmulti(image_path, sample_key, channels=None, return_full_profile=False):
-    """Load a Perturb-Multi cell crop: npz['x'] (18,H,W) float[0,1] -> selected
-    channels in [-1, 1], already channel-first so no permute/255 transform.
-    `channels` (npz indices) is per-config; falls back to PERTURBMULTI_CHANNELS.
+def _load_microalgae_rgb(image_path, sample_key, image_size=128):
+    """Load an RGB microalgae image to [-1, 1].
 
-    When `return_full_profile` is True, also returns the full (18, H, W) array
-    in [0, 1] for use as marker-aware conditioning (Direction A)."""
-    channels = channels if channels is not None else PERTURBMULTI_CHANNELS
-    full = np.load(Path(image_path) / f"{sample_key}.npz")["x"]
-    arr = full[channels]
-    img = torch.from_numpy(np.ascontiguousarray(arr)).float()
-    result = img * 2.0 - 1.0  # [0,1] -> [-1,1]
-
-    if return_full_profile:
-        full_tensor = torch.from_numpy(np.ascontiguousarray(full)).float()
-        return result, full_tensor
-    return result
-
-
-def _get_cond_mean_profile(condition_id: int, device=None):
-    """Return the population-mean 18-channel profile for a target condition.
-
-    Broadcasts the per-channel scalar means to a (18, 128, 128) spatial tensor
-    compatible with the MAC MarkerProfileEncoder Conv2d input.  The constant
-    feature maps let the Conv2d extract per-channel features without spatial
-    variation — the model learns to condition on the canonical molecular state
-    of the TARGET condition rather than the individual (noisy, pseudo-paired)
-    control cell.
-
-    Profiles are loaded lazily from ``data/processed/<task>/cond_mean_profiles.npz``.
+    Single-cell Cellpose crops are scale-bearing images, so PNG crops are
+    centered on a fixed canvas instead of stretched to fill it. Whole-field JPGs
+    are still resized because they are full field-of-view images.
     """
-    global _COND_MEAN_PROFILES
-    if _COND_MEAN_PROFILES is None:
-        # Try diet first; could be extended with a config-driven path later.
-        import os
-        candidates = [
-            "data/processed/diet/cond_mean_profiles.npz",
-            "data/processed/crispr/cond_mean_profiles.npz",
-            os.path.join(os.path.dirname(__file__), "..", "..", "..", "..", "data", "processed", "diet", "cond_mean_profiles.npz"),
-            os.path.join(os.path.dirname(__file__), "..", "..", "..", "..", "data", "processed", "crispr", "cond_mean_profiles.npz"),
-        ]
-        path = None
-        for c in candidates:
-            if os.path.exists(c):
-                path = c
-                break
-        if path is None:
-            raise FileNotFoundError(
-                "cond_mean_profiles.npz not found. Run the profile computation step first."
-            )
-        data = np.load(path)
-        _COND_MEAN_PROFILES = {int(k): torch.from_numpy(data[k].astype(np.float32)) for k in data.files}
+    path = Path(image_path) / sample_key
+    arr = np.asarray(Image.open(path).convert("RGB"), dtype=np.float32)
+    img = torch.from_numpy(np.ascontiguousarray(arr)).permute(2, 0, 1)
+    if str(sample_key).lower().endswith(".png"):
+        img = _pad_or_shrink_to_canvas(img, image_size=image_size)
+        return img / 127.5 - 1.0
+    if img.shape[-2:] != (image_size, image_size):
+        img = torch.nn.functional.interpolate(
+            img.unsqueeze(0),
+            size=(image_size, image_size),
+            mode="bilinear",
+            align_corners=False,
+        ).squeeze(0)
+    return img / 127.5 - 1.0
 
-    mean_18 = _COND_MEAN_PROFILES[int(condition_id)]  # (18,)
-    # Broadcast to spatial: (18, 128, 128)
-    spatial = mean_18[:, None, None].expand(18, 128, 128).clone()
-    if device is not None:
-        spatial = spatial.to(device)
-    return spatial
+
+def _pad_or_shrink_to_canvas(img, image_size=128):
+    """Keep crop pixel scale when possible; only shrink rare oversized crops."""
+    _, h, w = img.shape
+    if h > image_size or w > image_size:
+        scale = image_size / max(h, w)
+        new_h = max(1, round(h * scale))
+        new_w = max(1, round(w * scale))
+        img = torch.nn.functional.interpolate(
+            img.unsqueeze(0),
+            size=(new_h, new_w),
+            mode="bilinear",
+            align_corners=False,
+        ).squeeze(0)
+        _, h, w = img.shape
+
+    canvas = torch.zeros((img.shape[0], image_size, image_size), dtype=img.dtype, device=img.device)
+    y0 = (image_size - h) // 2
+    x0 = (image_size - w) // 2
+    canvas[:, y0 : y0 + h, x0 : x0 + w] = img
+    return canvas
+
+
+def _load_microalgae_png(image_path, sample_key, image_size=128):
+    """Backward-compatible wrapper for crop PNG loading."""
+    return _load_microalgae_rgb(image_path, sample_key, image_size=image_size)
+
+
+def centered_noise(shape, sigma, device="cpu"):
+    """Generate noise with a Gaussian spatial envelope centered in the image.
+
+    Args:
+        shape: (B, C, H, W) output shape.
+        sigma: envelope width in normalized [-1,1] coordinates.
+               sigma=0 → uniform noise; sigma=0.3–0.5 → single centered cell.
+        device: torch device.
+
+    Returns:
+        torch.Tensor of shape ``shape`` in [-1, 1].
+    """
+    if sigma <= 0:
+        return torch.randn(shape, device=device)
+
+    _, _, H, W = shape
+    ys = torch.linspace(-1, 1, H, device=device)
+    xs = torch.linspace(-1, 1, W, device=device)
+    yy, xx = torch.meshgrid(ys, xs, indexing="ij")
+    r2 = yy**2 + xx**2
+    envelope = torch.exp(-r2 / (2 * sigma**2))  # 1 at centre, →0 at corners
+    noise = torch.randn(shape, device=device)
+    return noise * envelope.unsqueeze(0).unsqueeze(0)
 
 
 class CustomTransform:
@@ -124,7 +126,7 @@ class CustomTransform:
         trans = T.Compose(t)
         return trans(X)
 
-def read_files_pert(file_names, mols, mol2id, y2id, dose, y, transform, image_path, dataset_name, idx, multimodal, batch, iter_ctrl, channels=None, return_full_profile=False, pairing_mode='batch_random', precomputed_pairing=None, cluster_map=None, augment_strength='default'):
+def read_files_pert(file_names, mols, mol2id, y2id, dose, y, transform, image_path, dataset_name, idx, multimodal, batch, iter_ctrl, pairing_mode='batch_random', precomputed_pairing=None, cluster_map=None, augment_strength='default'):
     """
     Read and process control and treated batch images.
 
@@ -211,32 +213,22 @@ def read_files_pert(file_names, mols, mol2id, y2id, dose, y, transform, image_pa
             idx_ctrl = np.random.choice(ctrl_indices_same_batch)
             img_file_ctrl = file_names["ctrl"][idx_ctrl]
 
-    if dataset_name == "perturbmulti":
-        # Direct npz load by cell_id; same-batch ctrl pairing already done above.
-        if return_full_profile:
-            img_ctrl, full_ctrl = _load_perturbmulti(image_path, img_file_ctrl, channels, return_full_profile=True)
-            img_trt, full_trt = _load_perturbmulti(image_path, img_file_trt, channels, return_full_profile=True)
-        else:
-            img_ctrl = _load_perturbmulti(image_path, img_file_ctrl, channels)
-            img_trt = _load_perturbmulti(image_path, img_file_trt, channels)
-        # Range-safe augmentation for perturbmulti.
-        # CustomTransform's noise/normalize path assumes [0,255] inputs and is
-        # bypassed for perturbmulti, so apply augmentations directly to [-1,1]
-        # tensors.  All augmentations apply IDENTICALLY to ctrl+trt (and full
-        # profile when loaded) so the learned control->target mapping is
-        # invariant to these transformations.
+    if dataset_name in {"microalgae", "microalgae_field"}:
+        # Direct image load by filename; same-batch ctrl pairing already done above.
+        img_ctrl = _load_microalgae_rgb(image_path, img_file_ctrl)
+        img_trt = _load_microalgae_rgb(image_path, img_file_trt)
+
+        # Range-safe augmentation for RGB data already normalized to [-1,1].
+        # Apply identical transforms to ctrl+trt so the learned mapping is not
+        # confounded by augmentation mismatch.
         if getattr(transform, "augment", False):
             _astrength = augment_strength
 
             # --- Always-on: random flips (safe for [-1,1]) ---
             if torch.rand(1).item() < 0.3:
                 img_ctrl, img_trt = torch.flip(img_ctrl, [-1]), torch.flip(img_trt, [-1])
-                if return_full_profile:
-                    full_ctrl, full_trt = torch.flip(full_ctrl, [-1]), torch.flip(full_trt, [-1])
             if torch.rand(1).item() < 0.3:
                 img_ctrl, img_trt = torch.flip(img_ctrl, [-2]), torch.flip(img_trt, [-2])
-                if return_full_profile:
-                    full_ctrl, full_trt = torch.flip(full_ctrl, [-2]), torch.flip(full_trt, [-2])
 
             # --- Strong augmentation: spatial jitter + intensity scaling ---
             if _astrength == 'strong':
@@ -246,17 +238,11 @@ def read_files_pert(file_names, mols, mol2id, y2id, dose, y, transform, image_pa
                 if shift_y != 0 or shift_x != 0:
                     img_ctrl = torch.roll(img_ctrl, shifts=(shift_y, shift_x), dims=(-2, -1))
                     img_trt = torch.roll(img_trt, shifts=(shift_y, shift_x), dims=(-2, -1))
-                    if return_full_profile:
-                        full_ctrl = torch.roll(full_ctrl, shifts=(shift_y, shift_x), dims=(-2, -1))
-                        full_trt = torch.roll(full_trt, shifts=(shift_y, shift_x), dims=(-2, -1))
 
                 # Random per-channel intensity scaling (0.9-1.1)
                 intensity_scale = 0.9 + 0.2 * torch.rand(1).item()
                 img_ctrl = img_ctrl * intensity_scale
                 img_trt = img_trt * intensity_scale
-                if return_full_profile:
-                    full_ctrl = full_ctrl * intensity_scale
-                    full_trt = full_trt * intensity_scale
 
                 # Add small Gaussian noise (std=0.02, on [-1,1] scale)
                 noise_std = 0.02
@@ -265,7 +251,8 @@ def read_files_pert(file_names, mols, mol2id, y2id, dose, y, transform, image_pa
                 # Clamp back to [-1,1]
                 img_ctrl = torch.clamp(img_ctrl, -1.0, 1.0)
                 img_trt = torch.clamp(img_trt, -1.0, 1.0)
-        result = {
+
+        return {
             'X': (img_ctrl, img_trt),
             'mols': mol2id[mols["trt"][idx_trt]],
             'y_id': y2id[y["trt"][idx_trt]],
@@ -274,16 +261,6 @@ def read_files_pert(file_names, mols, mol2id, y2id, dose, y, transform, image_pa
             'idx_ctrl': idx_ctrl,
             'batch': batch_trt,
         }
-        if return_full_profile:
-            result['marker_profile'] = _get_cond_mean_profile(
-                y2id[y["trt"][idx_trt]], device=img_ctrl.device
-            )
-            # PhenoFlux MAC/CCM: condition on TARGET condition's population-mean
-            # 18-channel profile instead of the individual control cell's profile.
-            # Pseudo-paired data (same-batch, different cells) means per-cell
-            # control profiles are confounded with individual variation; population
-            # means capture the canonical molecular state of each condition.
-        return result
 
     # Split files
     file_split_ctrl = img_file_ctrl.split('-')
@@ -430,4 +407,3 @@ def convert_5ch_to_3ch(images):
     """
     images_rgb = images[:, :3, :, :]
     return images_rgb
-

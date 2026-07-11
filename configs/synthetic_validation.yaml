@@ -1,0 +1,24 @@
+task_name: synthetic_validation
+ood_set: null
+mol_list: null
+trainable_emb: false
+dataset_name: microalgae
+dataset: phenoflux_small
+n_channels: 3
+channels: null
+multimodal: false
+batch_correction: false
+batch_key: null
+use_condition_embeddings: false
+add_controls: false
+condition_embedding_dimension: null
+modality_list:
+  - BioFeat
+image_path: data/synthetic_validation
+data_index_path: data/synthetic_validation/index.csv
+embedding_path: data/synthetic_validation/embedding.csv
+augment_train: false
+normalize: false
+base_condition_dim: 4
+use_msa: false
+pairing_mode: batch_random

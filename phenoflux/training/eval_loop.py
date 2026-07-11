@@ -31,7 +31,7 @@ from torchvision.utils import save_image
 from phenoflux.training.distributed import is_dist_avail_and_initialized, get_world_size, is_main_process
 from phenoflux.training.edm_time import get_time_discretization
 from phenoflux.training.train_loop import MASK_TOKEN
-from phenoflux.training.data_utils import convert_6ch_to_3ch, convert_5ch_to_3ch
+from phenoflux.training.data_utils import convert_6ch_to_3ch, convert_5ch_to_3ch, centered_noise
 logger = logging.getLogger(__name__)
 
 PRINT_FREQUENCY = 50
@@ -130,9 +130,10 @@ def eval_model(
 
     # Eval uses less GPU memory (no gradients/optimizer), so we can use a larger
     # batch size than training to speed up FID image generation.
-    eval_bs = getattr(args, 'eval_batch_size', 0) or args.batch_size
-    if eval_bs != args.batch_size:
-        logger.info(f"Eval batch_size: {eval_bs} (train was {args.batch_size})")
+    train_bs = getattr(args, 'batch_size', 32)
+    eval_bs = getattr(args, 'eval_batch_size', 0) or train_bs
+    if eval_bs != train_bs:
+        logger.info(f"Eval batch_size: {eval_bs} (train was {train_bs})")
         data_loader = torch.utils.data.DataLoader(
             datamodule.test_set,
             batch_size=eval_bs,
@@ -182,10 +183,8 @@ def eval_model(
         samples = None
         labels = None
 
-        # Build extra conditioning dict — pass marker_profile for UNet's internal MSA/PCD
+        # Build extra conditioning dict
         eval_extra = {"concat_conditioning": z_emb_trg}
-        if "marker_profile" in batch:
-            eval_extra["marker_profile"] = batch["marker_profile"].to(device)
 
         if num_synthetic < fid_samples:
             cfg_scaled_model.reset_nfe_counter()
@@ -220,7 +219,7 @@ def eval_model(
                 elif use_initial == 2:
                     x_0 = x_real_ctrl + torch.randn(x_real_ctrl.shape, dtype=torch.float32, device=device) * args.noise_level
                 else:
-                    x_0 = torch.randn(x_real_ctrl.shape, dtype=torch.float32, device=device)
+                    x_0 = centered_noise(x_real_ctrl.shape, getattr(args, "center_noise_sigma", 0.0), device=device)
 
 
                 if args.edm_schedule:
@@ -318,10 +317,10 @@ def eval_model(
                     target_class_name = id2mol[target_class_labels[batch_index]]
                     save_dir = image_dir / target_class_name
                     os.makedirs(save_dir, exist_ok=True)
-                    image_path = (
-                        save_dir
-                        / f"{img_file_trt[batch_index]}.png"
-                    )
+                    fname = Path(img_file_trt[batch_index]).name
+                    if fname.endswith('.png'):
+                        fname = fname[:-4]
+                    image_path = save_dir / f"{fname}.png"
                     PIL.Image.fromarray(image_np, "RGB").save(image_path)
                     trt2ctrl_idx[img_file_trt[batch_index]] = img_file_ctrl[batch_index]
 

@@ -1,6 +1,12 @@
-# PhenoFlux
+# PhenoFlux - Microalgae Phenotype Generation
 
-Flow matching with pluggable molecular priors for cellular phenotype transport.
+Flow matching for microalgae cellular phenotype transport across time-course conditions.
+
+## Project Overview
+
+**Current Focus**: Microalgae phenotype generation from time-course microscopy data (RGB bright-field imaging).
+
+**Archived**: CRISPR/Diet datasets (18-channel MERFISH data) → `archive_crispr_diet_2026_07_04/`
 
 ## Project Structure
 
@@ -9,180 +15,166 @@ phenoflux/                    # Python package
 ├── train.py                  # Entry point (torchrun -m phenoflux.train)
 ├── args.py                   # Argument parser
 ├── models/
-│   ├── configs.py            # MODEL_CONFIGS registry (1 entry: phenoflux)
-│   ├── unet.py               # UNetModel with internal MSA/PCD
-│   ├── msa.py                # Marker Self-Attention (marker co-regulation)
-│   ├── pcd.py                # Per-Channel Decoder (per-channel modulation)
+│   ├── configs.py            # MODEL_CONFIGS registry (simplified)
+│   ├── unet.py               # UNetModel (standard backbone)
 │   ├── ema.py                # Exponential Moving Average
-│   ├── nn.py                 # NN utilities (SiLU, GroupNorm32, etc.)
-│   └── discrete_unet.py      # Discrete UNet variant
+│   └── nn.py                 # NN utilities
 ├── training/
-│   ├── train_loop.py         # Training loop (foreground_loss, CFG, marker_profile)
-│   ├── eval_loop.py          # Eval loop (FID, CFGScaledModel, image generation)
+│   ├── train_loop.py         # Training loop (flow matching, CFG)
+│   ├── eval_loop.py          # Evaluation loop (FID, image generation)
 │   ├── dataloader.py         # CellDataset, CellDataLoader
-│   ├── data_utils.py         # read_files_pert, _load_perturbmulti
+│   ├── data_utils.py         # Microalgae RGB loading
 │   ├── data_transform.py     # Augmentation transforms
 │   ├── distributed.py        # DDP helpers
 │   ├── grad_scaler.py        # AMP gradient scaler
 │   ├── load_save.py          # Checkpoint load/save
 │   └── edm_time.py           # EDM time discretization
 └── eval/
-    ├── fid.py                # FIDo/c, KIDo/c (matched-N)
-    ├── aggregate.py          # PGC (Phenotypic Gap Closure), dir-corr, sign-agreement, Pearson
-    ├── moa.py                # MoA classifier (InceptionV3 + MLP)
-    └── figures.py            # Marker distribution KDE + bar charts
+    ├── fid.py                # FIDo/c, KIDo/c
+    ├── morphology.py         # Morphology feature extraction
+    ├── distribution_eval.py  # Distribution-level (population) evaluation
+    └── aggregate_microalgae.py  # Phenotypic metrics aggregation
 
-configs/                      # 7 paper experiment configs
-scripts/                      # train.sh, quick_validate.sh, ablate_*.sh, build/bench scripts
-baselines/                    # IMPA, PhenDiff, StarGAN, MorphoDiff adapters
+configs/                      # 5 active configs (see configs/README.md)
+scripts/                      # Microalgae data building scripts
 outputs/                      # Training outputs (gitignored)
-docs/                         # ARCHITECTURE, EVAL_PROTOCOL, REPRODUCING
+archive_crispr_diet_2026_07_04/  # Archived materials (gitignored)
 ```
+
+## Datasets
+
+### Microalgae (Active)
+
+Two granularity levels for microalgae phenotype generation:
+
+#### 1. Single-Cell Level (`microalgae_timepoint_512_62d.yaml`, primary)
+- **Images**: RGB crops (512×512, 3 channels)
+- **Image source**: `data/raw/microalgae_v1/single_cell_images`
+- **Condition**: 62-dim embedding = 2 light/dark + 1 time_norm + 1 time_bin_h + 29 RNA PCA + 29 Protein PCA (z-scored)
+- **Data index**: `data/processed/microalgae_v1/views/timepoint_512/index.csv`
+- **Embedding**: `data/processed/microalgae_v1/views/timepoint_512/embedding_62d.csv`
+- **4d baseline**: `microalgae_timepoint_512.yaml` (same view, no omics — ablation counterpart)
+- **Use case**: Cell-level phenotype prediction
+
+#### 2. Field-Level (`microalgae_field.yaml`)
+- **Images**: Whole microscopy fields (3 channels)
+- **Image source**: `data/raw/microalgae_v1/field_images`
+- **Condition**: 34-dim embedding (field morphology statistics + aligned omics PCs)
+- **Data index**: `data/processed/microalgae_v1/views/field/index.csv`
+- **Use case**: Field-level phenotype prediction (closer to acquisition unit)
+
+### Data Pairing Strategy
+
+**Mode**: `batch_random` (default for microalgae)
+- Control and treated samples randomly paired within the same batch
+- Preserves batch-level covariate structure
+- Suitable for continuous time-course data
 
 ## Architecture
 
-One UNet body (`phenoflux`), configurable molecular prior via YAML flags:
+### Standard UNet (No Molecular Priors)
 
 ```
-                    ┌─────────────────────────┐
-Condition (one-hot) │ base_condition_dim      │  3 (diet) / 40 (crispr)
-                    ├─────────────────────────┤
-Molecular prior     │ use_msa / use_pcd       │  MSA → PCD (both datasets)
-                    │ use_marker_profile      │  Info control: naive 18ch concat
-                    ├─────────────────────────┤
-condition_dim       │ auto-computed           │  base + 64 (MSA) or +18 (naive)
-                    └─────────────────────────┘
+Input (3ch RGB) → UNet Encoder → Condition Embedding + Time Embedding
+                                           ↓
+                                  UNet Decoder with skip connections
+                                           ↓
+                                  Output (3ch RGB)
 ```
 
-### Paper Configs (7)
+**Key parameters** (from config YAML):
+- `in_channels`: 3 (RGB)
+- `out_channels`: 3 (RGB)
+- `model_channels`: 128
+- `base_condition_dim`: config-dependent
+  - **Base configs** (`microalgae_timepoint_512`, `microalgae_smoke`): 4 dims — `light/dark/time_norm/time_bin_h`.
+  - **Omics-enriched config** (`microalgae_timepoint_512_62d`): 62 dims — 4 base + 29 RNA PCA + 29 Protein PCA (z-scored), built by `scripts/interpolate_omics_to_timepoints.py` → `embedding_62d.csv`. This is the Stage-2 condition that addresses the identity-mapping collapse.
+  - The embedding CSV carries a `timegroup_key` index column that the dataloader drops (`index_col=0`), so 63 CSV columns → 62 feature dims.
+- `condition_dim`: Same as `base_condition_dim` (no molecular prior concat)
 
-| Config | Dataset | Prior | condition_dim | Proves |
-|--------|---------|-------|:---:|--------|
-| `phenoflux_diet` | Diet | none | 3 | Baseline |
-| `phenoflux_diet_18ch` | Diet | naive 18ch concat | 21 | Raw marker info helps |
-| `phenoflux_diet_msa` | Diet | MSA | 67 | Learned attention > naive |
-| `phenoflux_diet_msa_pcd` | Diet | MSA+PCD | 67 | Per-channel modulation helps |
-| `phenoflux_crispr` | CRISPR | none | 40 | Baseline |
-| `phenoflux_crispr_msa` | CRISPR | MSA | 104 | Marker prior generalizes |
-| `phenoflux_crispr_msa_pcd` | CRISPR | MSA+PCD | 104 | Per-channel modulation generalizes |
+**What we DON'T use** (archived with CRISPR/Diet):
+- ❌ MSA (Marker Self-Attention) — requires 18-channel marker panels
+- ❌ PCD (Per-Channel Decoder) — marker-specific modulation
+- ❌ MGFM/SGLR/AdaIN — marker-gated feature modulation
+- ❌ `marker_profile` — population-mean marker statistics
 
-Data size controlled via `--data_index` CLI (not separate configs):
-```bash
---data_index data/processed/diet/index_diet_5k.csv    # 5k fast validation
---data_index data/processed/diet/index_diet.csv        # full dataset (default)
-```
+## Training
 
-## Data Flow
-
-1. `data_utils.py:read_files_pert` pairs control+treated cells from same batch
-2. `use_initial=1` → ODE starts from control image (not noise)
-3. `marker_profile` = population-mean 18ch profile of target condition (broadcast to spatial)
-4. MSA processes marker_profile internally in UNet.forward() → 64-dim context concatenated to condition
-5. PCD applies per-channel (scale, bias) modulation on UNet output from MSA context
-6. Flow matching: model learns velocity field from control→target
-
-## Critical Design Rules
-
-1. **marker_profile MUST NOT leak into unconditional path**. When `class_drop_prob` triggers CFG dropout (`conditioning={}`), marker_profile must also be absent. UNet handles this via zero-padding condition to expected dim.
-
-2. **EMA unwrapping needed** before checking module flags. Use `getattr(model, 'model', model)`.
-
-3. **MSA/PCD are inside UNetModel** (checkpointed). Not externally constructed.
-
-4. **Every epoch saves checkpoint**. Training can be paused/resumed at any epoch boundary.
-
-5. **`find_unused_parameters=True` is REQUIRED** for DDP — MSA/PCD params may be unused during CFG dropout.
-
-## Training Commands
-
-All use `--dataset phenoflux --config <name>`:
+### Quick Start
 
 ```bash
-# Quick validation (mini subset, 2 epochs, 64 images)
-bash scripts/quick_validate.sh phenoflux_diet_msa_pcd phenoflux
+# CPU smoke (no external data, validates dataloader+model path)
+make smoke
 
-# Diet baseline (5k subset)
-torchrun --standalone --nproc_per_node=2 -m phenoflux.train \
-  --dataset phenoflux --config phenoflux_diet --device cuda \
-  --batch_size 32 --epochs 20 --use_initial 1 --cfg_scale 0.2 \
-  --use_ema --skewed_timesteps --class_drop_prob 0.2 \
-  --eval_frequency 5 --fid_samples 5120 --compute_fid --save_fid_samples \
-  --data_index data/processed/diet/index_diet_5k.csv \
-  --output_dir outputs/runs/diet/phenoflux_diet_5k_v1
+# Build the 62d omics condition embedding for the primary path
+make interpolate
 
-# Diet + MSA + PCD (full)
-torchrun --standalone --nproc_per_node=2 -m phenoflux.train \
-  --dataset phenoflux --config phenoflux_diet_msa_pcd --device cuda \
-  --batch_size 32 --epochs 20 --use_initial 1 --cfg_scale 0.2 \
-  --use_ema --skewed_timesteps --class_drop_prob 0.2 \
-  --eval_frequency 5 --fid_samples 5120 --compute_fid --save_fid_samples \
-  --output_dir outputs/runs/diet/phenoflux_diet_msa_pcd_v1
+# 1-GPU quick sanity run of the primary 62d config
+make quick
 
-# CRISPR baseline
-torchrun --standalone --nproc_per_node=2 -m phenoflux.train \
-  --dataset phenoflux --config phenoflux_crispr --device cuda \
-  --batch_size 32 --epochs 40 --use_initial 1 --cfg_scale 0.2 \
-  --use_ema --skewed_timesteps --class_drop_prob 0.2 \
-  --eval_frequency 10 --fid_samples 5120 --compute_fid --save_fid_samples \
-  --output_dir outputs/runs/crispr/phenoflux_crispr_v1
+# Full training of the primary 62d config (1x RTX 4090)
+make train
 
-# CRISPR + MSA + PCD
-torchrun --standalone --nproc_per_node=2 -m phenoflux.train \
-  --dataset phenoflux --config phenoflux_crispr_msa_pcd --device cuda \
-  --batch_size 32 --epochs 40 --use_initial 1 --cfg_scale 0.2 \
-  --use_ema --skewed_timesteps --class_drop_prob 0.2 \
-  --eval_frequency 10 --fid_samples 5120 --compute_fid --save_fid_samples \
-  --output_dir outputs/runs/crispr/phenoflux_crispr_msa_pcd_v1
+# Baseline / overrides (scripts/train.sh is env-var parameterized):
+CONFIG=microalgae_timepoint_512 BATCH=16 EPOCHS=40 bash scripts/train.sh   # 4d ablation
+CONFIG=microalgae_field DATASET=phenoflux bash scripts/train.sh            # field lane
 ```
+
+### Key Training Flags
+
+| Flag | Purpose | Recommended |
+|------|---------|-------------|
+| `--use_initial 1` | ODE starts from control image (not noise) | ✅ Yes |
+| `--cfg_scale 0.2` | Classifier-Free Guidance strength | 0.1-0.3 |
+| `--class_drop_prob 0.2` | CFG dropout probability during training | 0.1-0.3 |
+| `--use_ema` | Exponential Moving Average of weights | ✅ Yes |
+| `--skewed_timesteps` | EDM-style log-normal time sampling | ✅ Yes |
+| `--compute_fid` | Compute FID during eval epochs | Optional |
 
 ## Evaluation
 
-### Image quality (FIDo/c, KIDo/c)
+### Image Quality Metrics
 ```bash
-python phenoflux/eval/fid.py --real-dir <real_imgs> --gen-dir <gen_imgs> --per-condition-cap 500
+python phenoflux/eval/fid.py \
+  --real-dir <real_imgs> \
+  --gen-dir <gen_imgs> \
+  --per-condition-cap 500
 ```
 
-### Biological metrics (PGC, dir-corr, sign-agreement)
+### Biological Metrics
 ```bash
-python phenoflux/eval/aggregate.py <eval_dir> 5 <epoch>
+python phenoflux/eval/aggregate_microalgae.py <run_dir> 5 <epoch>
 ```
 
-### MoA classifier accuracy
+## Data Building Scripts
+
 ```bash
-python phenoflux/eval/moa.py \
-  --config_path configs/phenoflux_crispr.yaml --mode eval \
-  --img_root_path <eval_dir>/fid_samples/epoch-<N> \
-  --ckpt_path outputs/baselines/moa/crispr/condition_classifier.pth \
-  --out_json <eval_dir>/moa.json
+# Build single-cell (timepoint) + field processed views
+python scripts/build_microalgae_dataset.py --version microalgae_v1 --views timepoint,field
+
+# Build the 62d omics condition embedding for the primary path
+python scripts/interpolate_omics_to_timepoints.py
+
+# Build field metadata (EXIF + morphology summaries) only
+python scripts/build_field_metadata.py
 ```
 
-### Quick validation protocol
-```bash
-bash scripts/quick_validate.sh <config> phenoflux [data_index]
-# Example: bash scripts/quick_validate.sh phenoflux_diet phenoflux
-```
+## Critical Design Notes
 
-## Scripts
+1. **No marker_profile needed**: Microalgae uses continuous condition embeddings (from CSV), not marker-specific profiles.
 
-| Script | Purpose | Key Env Vars |
-|--------|---------|--------------|
-| `scripts/train.sh` | General-purpose training launcher | `CONFIG`, `DATASET`, `EPOCHS`, `BATCH`, `CFG` |
-| `scripts/quick_validate.sh` | Fast 2-epoch validation (64 images) | — |
-| `scripts/ablate_diet.sh` | Diet 4-config ablation (`baseline,naive,msa,msa_pcd`) | `CONFIGS`, `EPOCHS`, `DATA_INDEX` |
-| `scripts/ablate_crispr.sh` | CRISPR 3-config ablation (`baseline,msa,msa_pcd`) | `CONFIGS`, `EPOCHS`, `DATA_INDEX` |
-| `scripts/build_diet_data.py` | Build full diet index from raw parquet/h5ad | — |
-| `scripts/build_diet_subset.py` | Build stratified diet subsets (5k/50k/100k/200k) | — |
-| `scripts/build_crispr_paper_data.py` | Build CRISPR paper_40 index from raw | — |
-| `scripts/analyze_diet_scale.py` | Diet data scale/distribution analysis | — |
-| `scripts/bench_solver.py` | ODE solver benchmark (dopri5/rk4/euler) | — |
+2. **RGB normalization**: Images loaded as `[-1, 1]` via `(pixel / 127.5) - 1.0`.
 
-All train scripts accept `--wandb_project` / `--wandb_run_name` for experiment tracking.
+3. **Flow matching from control**: `use_initial=1` means ODE integrates from real control image to target, not from noise.
+
+4. **CFG handling**: When `class_drop_prob` triggers dropout, `conditioning={}` is passed (no zero-padding needed for microalgae).
+
+5. **Batch pairing**: `pairing_mode='batch_random'` randomly pairs control/treated within same batch to preserve batch effects.
 
 ## Environment
 - Conda env: `pmf`
 - Python 3.10, PyTorch 2.11.0+cu128
-- GPUs: 2× NVIDIA RTX 5090 (32GB each)
-- NEVER set PYTHONNOUSERSITE — it breaks the baseline stack
+- GPUs: 1× NVIDIA RTX 4090 (24GB)
 
 ## Time
-- **Always use Beijing time (UTC+8 / Asia/Shanghai)**. Never UTC.
+- **Always use Beijing time (UTC+8 / Asia/Shanghai)**
