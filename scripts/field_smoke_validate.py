@@ -19,7 +19,7 @@ import yaml
 
 from phenoflux.args import get_args_parser
 from phenoflux.models.configs import instantiate_model
-from phenoflux.training.dataloader import CellDataLoader
+from phenoflux.data.dataloader import CellDataLoader
 
 
 def main() -> int:

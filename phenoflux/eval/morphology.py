@@ -144,7 +144,7 @@ def extract_features(img: np.ndarray, fg_thresh: float = 0.05) -> np.ndarray | N
 
 
 def _pad_or_shrink_to_canvas_np(img: np.ndarray, image_size: int) -> np.ndarray:
-    """NumPy port of training.data_utils._pad_or_shrink_to_canvas (RGB, [0,1]).
+    """NumPy port of data.data_utils._pad_or_shrink_to_canvas (RGB, [0,1]).
 
     Keeps crop pixel scale: small crops are centered on a black canvas, only
     oversized crops are shrunk. This MUST match the training/eval load path so

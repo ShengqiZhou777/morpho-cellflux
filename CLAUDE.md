@@ -14,22 +14,23 @@ Flow matching for microalgae cellular phenotype transport across time-course con
 phenoflux/                    # Python package
 ├── train.py                  # Entry point (torchrun -m phenoflux.train)
 ├── args.py                   # Argument parser
+├── data/                     # Data loading & preprocessing
+│   ├── dataloader.py         # CellDataset, CellDataLoader
+│   ├── data_utils.py         # Microalgae RGB loading
+│   └── data_transform.py     # Augmentation transforms
 ├── models/
 │   ├── configs.py            # MODEL_CONFIGS registry (simplified)
 │   ├── unet.py               # UNetModel (standard backbone)
 │   ├── ema.py                # Exponential Moving Average
 │   └── nn.py                 # NN utilities
-├── training/
+├── training/                 # Training orchestration
 │   ├── train_loop.py         # Training loop (flow matching, CFG)
-│   ├── eval_loop.py          # Evaluation loop (FID, image generation)
-│   ├── dataloader.py         # CellDataset, CellDataLoader
-│   ├── data_utils.py         # Microalgae RGB loading
-│   ├── data_transform.py     # Augmentation transforms
 │   ├── distributed.py        # DDP helpers
 │   ├── grad_scaler.py        # AMP gradient scaler
 │   ├── load_save.py          # Checkpoint load/save
 │   └── edm_time.py           # EDM time discretization
-└── eval/
+└── eval/                     # Evaluation (in-loop + post-hoc metrics)
+    ├── eval_loop.py          # In-training eval loop (ODE sampling, FID, save images)
     ├── fid.py                # FIDo/c, KIDo/c
     ├── morphology.py         # Morphology feature extraction
     ├── distribution_eval.py  # Distribution-level (population) evaluation

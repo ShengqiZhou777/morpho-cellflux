@@ -5,7 +5,7 @@ import pandas as pd
 import torch
 from torch.utils.data import Dataset
 from pytorch_lightning import LightningDataModule
-from phenoflux.training.data_utils import CustomTransform, read_files_batch, read_files_pert
+from phenoflux.data.data_utils import CustomTransform, read_files_batch, read_files_pert
 
 
 def _load_pairing_json(args):

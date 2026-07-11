@@ -15,7 +15,7 @@ import PIL.Image
 import numpy as np
 from tqdm import tqdm
 import matplotlib.pyplot as plt
-from phenoflux.training.dataloader import CellDataLoader
+from phenoflux.data.dataloader import CellDataLoader
 import torch
 from flow_matching.solver.ode_solver import ODESolver
 from flow_matching.utils import ModelWrapper
@@ -25,7 +25,7 @@ from torchmetrics.image.fid import FrechetInceptionDistance
 from torchvision.utils import save_image
 from phenoflux.training.distributed import is_dist_avail_and_initialized, get_world_size, is_main_process
 from phenoflux.training.edm_time import get_time_discretization
-from phenoflux.training.data_utils import convert_6ch_to_3ch, convert_5ch_to_3ch
+from phenoflux.data.data_utils import convert_6ch_to_3ch, convert_5ch_to_3ch
 logger = logging.getLogger(__name__)
 
 PRINT_FREQUENCY = 50

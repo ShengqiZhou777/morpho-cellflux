@@ -23,8 +23,8 @@ sys.path.insert(0, str(ROOT))
 
 from phenoflux.args import get_args_parser
 from phenoflux.models.configs import instantiate_model
-from phenoflux.training.data_utils import _load_microalgae_rgb
-from phenoflux.training.eval_loop import CFGScaledModel
+from phenoflux.data.data_utils import _load_microalgae_rgb
+from phenoflux.eval.eval_loop import CFGScaledModel
 
 
 def _load_args(config_name: str) -> SimpleNamespace:

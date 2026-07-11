@@ -23,12 +23,12 @@ from phenoflux.models.configs import instantiate_model
 from phenoflux.args import get_args_parser
 
 from phenoflux.training.distributed import init_distributed_mode, is_main_process, get_rank, get_world_size
-from phenoflux.training.data_transform import get_train_transform
-from phenoflux.training.eval_loop import eval_model
+from phenoflux.data.data_transform import get_train_transform
+from phenoflux.eval.eval_loop import eval_model
 from phenoflux.training.grad_scaler import NativeScalerWithGradNormCount as NativeScaler
 from phenoflux.training.load_save import load_model, save_model
 from phenoflux.training.train_loop import my_train_one_epoch
-from phenoflux.training.dataloader import CellDataLoader
+from phenoflux.data.dataloader import CellDataLoader
 logger = logging.getLogger(__name__)
 
 

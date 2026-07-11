@@ -15,7 +15,7 @@ from torch.nn.parallel import DistributedDataParallel
 from torchmetrics.aggregation import MeanMetric
 
 from phenoflux.models.ema import EMA
-from phenoflux.training.dataloader import CellDataLoader
+from phenoflux.data.dataloader import CellDataLoader
 from phenoflux.training.grad_scaler import NativeScalerWithGradNormCount
 
 logger = logging.getLogger(__name__)
