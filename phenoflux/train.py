@@ -105,7 +105,7 @@ def main(args):
 
     logger.info(f"Initializing Dataset: {args.dataset}")
     transform_train = get_train_transform()
-    valid_datasets = ['phenoflux', 'phenoflux_small', 'phenoflux_medium']
+    valid_datasets = ['phenoflux', 'phenoflux_small']
     if args.dataset in valid_datasets:
         args.num_tasks = get_world_size()
         num_tasks = args.num_tasks
@@ -122,7 +122,6 @@ def main(args):
     logger.info("Initializing Model")
     model = instantiate_model(
         architechture=args.dataset,
-        is_discrete=args.discrete_flow_matching,
         use_ema=args.use_ema,
         overrides=vars(args),  # pass YAML molecular prior flags
     )

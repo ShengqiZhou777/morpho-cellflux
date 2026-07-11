@@ -17,21 +17,15 @@ from tqdm import tqdm
 import matplotlib.pyplot as plt
 from phenoflux.training.dataloader import CellDataLoader
 import torch
-from flow_matching.path import MixtureDiscreteProbPath
-from flow_matching.path.scheduler import PolynomialConvexScheduler
-from flow_matching.solver import MixtureDiscreteEulerSolver
 from flow_matching.solver.ode_solver import ODESolver
 from flow_matching.utils import ModelWrapper
-from phenoflux.models.discrete_unet import DiscreteUNetModel
-from phenoflux.models.ema import EMA
 from torch.nn.modules import Module
 from torch.nn.parallel import DistributedDataParallel
 from torchmetrics.image.fid import FrechetInceptionDistance
 from torchvision.utils import save_image
 from phenoflux.training.distributed import is_dist_avail_and_initialized, get_world_size, is_main_process
 from phenoflux.training.edm_time import get_time_discretization
-from phenoflux.training.train_loop import MASK_TOKEN
-from phenoflux.training.data_utils import convert_6ch_to_3ch, convert_5ch_to_3ch, centered_noise
+from phenoflux.training.data_utils import convert_6ch_to_3ch, convert_5ch_to_3ch
 logger = logging.getLogger(__name__)
 
 PRINT_FREQUENCY = 50
@@ -77,17 +71,6 @@ class CFGScaledModel(ModelWrapper):
     def forward(
         self, x: torch.Tensor, t: torch.Tensor, cfg_scale: float, extra: dict
     ):
-        module = (
-            self.model.module
-            if isinstance(self.model, DistributedDataParallel)
-            else self.model
-        )
-        is_discrete = isinstance(module, DiscreteUNetModel) or (
-            isinstance(module, EMA) and isinstance(module.model, DiscreteUNetModel)
-        )
-        assert (
-            cfg_scale == 0.0 or not is_discrete
-        ), f"Cfg scaling does not work for the logit outputs of discrete models. Got cfg weight={cfg_scale} and model {type(self.model)}."
         t = torch.zeros(x.shape[0], device=x.device) + t
 
         if cfg_scale != 0.0:
@@ -101,10 +84,7 @@ class CFGScaledModel(ModelWrapper):
                 result = self.model(x, t, extra=extra)
 
         self.nfe_counter += 1
-        if is_discrete:
-            return torch.softmax(result.to(dtype=torch.float32), dim=-1)
-        else:
-            return result.to(dtype=torch.float32)
+        return result.to(dtype=torch.float32)
 
     def reset_nfe_counter(self) -> None:
         self.nfe_counter = 0
@@ -146,20 +126,8 @@ def eval_model(
     cfg_scaled_model = CFGScaledModel(model=model)
     cfg_scaled_model.train(False)
 
-    if args.discrete_flow_matching:
-        scheduler = PolynomialConvexScheduler(n=3.0)
-        path = MixtureDiscreteProbPath(scheduler=scheduler)
-        p = torch.zeros(size=[257], dtype=torch.float32, device=device)
-        p[256] = 1.0
-        solver = MixtureDiscreteEulerSolver(
-            model=cfg_scaled_model,
-            path=path,
-            vocabulary_size=257,
-            source_distribution_p=p,
-        )
-    else:
-        solver = ODESolver(velocity_model=cfg_scaled_model)
-        ode_opts = args.ode_options
+    solver = ODESolver(velocity_model=cfg_scaled_model)
+    ode_opts = args.ode_options
 
     fid_metric = FrechetInceptionDistance(normalize=True).to(
         device=device, non_blocking=True
@@ -188,83 +156,49 @@ def eval_model(
 
         if num_synthetic < fid_samples:
             cfg_scaled_model.reset_nfe_counter()
-            if args.discrete_flow_matching:
-                # Discrete sampling
-                x_0 = (
-                    torch.zeros(samples.shape, dtype=torch.long, device=device)
-                    + MASK_TOKEN
-                )
-                if args.sym_func:
-                    sym = lambda t: 12.0 * torch.pow(t, 2.0) * torch.pow(1.0 - t, 0.25)
-                else:
-                    sym = args.sym
-                if args.sampling_dtype == "float32":
-                    dtype = torch.float32
-                elif args.sampling_dtype == "float64":
-                    dtype = torch.float64
+            x_0 = x_real_ctrl
 
-                synthetic_samples = solver.sample(
-                    x_init=x_0,
-                    step_size=1.0 / args.discrete_fm_steps,
-                    verbose=False,
-                    div_free=sym,
-                    dtype_categorical=dtype,
-                    label=labels,
-                    cfg_scale=args.cfg_scale,
-                )
+            if args.edm_schedule:
+                time_grid = get_time_discretization(nfes=ode_opts["nfe"])
             else:
-                # Continuous sampling
-                if use_initial == 1:
-                    x_0 = x_real_ctrl
-                elif use_initial == 2:
-                    x_0 = x_real_ctrl + torch.randn(x_real_ctrl.shape, dtype=torch.float32, device=device) * args.noise_level
-                else:
-                    x_0 = centered_noise(x_real_ctrl.shape, getattr(args, "center_noise_sigma", 0.0), device=device)
+                time_grid = torch.tensor([0.0, 1.0], device=device)
 
-
-                if args.edm_schedule:
-                    time_grid = get_time_discretization(nfes=ode_opts["nfe"])
-                else:
-                    time_grid = torch.tensor([0.0, 1.0], device=device)
-
-                synthetic_samples = solver.sample(
-                    time_grid=time_grid,
-                    x_init=x_0, # x_real_ctrl
-                    method=args.ode_method,
-                    return_intermediates=interpolate,
-                    atol=ode_opts["atol"] if "atol" in ode_opts else 1e-5,
-                    rtol=ode_opts["rtol"] if "atol" in ode_opts else 1e-5,
-                    step_size=ode_opts["step_size"]
-                    if "step_size" in ode_opts
-                    else None,
-                    cfg_scale=args.cfg_scale,
-                    extra=eval_extra,
+            synthetic_samples = solver.sample(
+                time_grid=time_grid,
+                x_init=x_0, # x_real_ctrl
+                method=args.ode_method,
+                return_intermediates=interpolate,
+                atol=ode_opts["atol"] if "atol" in ode_opts else 1e-5,
+                rtol=ode_opts["rtol"] if "atol" in ode_opts else 1e-5,
+                step_size=ode_opts["step_size"]
+                if "step_size" in ode_opts
+                else None,
+                cfg_scale=args.cfg_scale,
+                extra=eval_extra,
+            )
+            if interpolate:
+                # Save the intermediate images
+                save_interpolation_grid(
+                    synthetic_samples,
+                    y_trg,
+                    x_real_ctrl,
+                    x_real_trt,
+                    time_grid,
+                    save_dir=Path(args.output_dir) / "interpolation",
+                    title="Interpolation Visualization",
                 )
-                if interpolate:
-                    # Save the intermediate images
-                    save_interpolation_grid(
-                        synthetic_samples,
-                        y_trg,
-                        x_real_ctrl,
-                        x_real_trt,
-                        time_grid,
-                        save_dir=Path(args.output_dir) / "interpolation",
-                        title="Interpolation Visualization",
-                    )
-                    return {}
-                if args.dataset_name == 'rxrx1':
-                    x_real_trt = convert_6ch_to_3ch(x_real_trt)
-                    synthetic_samples = convert_6ch_to_3ch(synthetic_samples)
-                elif args.dataset_name == 'cpg0000':
-                    x_real_trt = convert_5ch_to_3ch(x_real_trt)
-                    synthetic_samples = convert_5ch_to_3ch(synthetic_samples)
-                # Scaling to [0, 1] from [-1, 1]
-                synthetic_samples = torch.clamp(
-                    synthetic_samples * 0.5 + 0.5, min=0.0, max=1.0
-                )
-                synthetic_samples = torch.floor(synthetic_samples * 255)
-
-
+                return {}
+            if args.dataset_name == 'rxrx1':
+                x_real_trt = convert_6ch_to_3ch(x_real_trt)
+                synthetic_samples = convert_6ch_to_3ch(synthetic_samples)
+            elif args.dataset_name == 'cpg0000':
+                x_real_trt = convert_5ch_to_3ch(x_real_trt)
+                synthetic_samples = convert_5ch_to_3ch(synthetic_samples)
+            # Scaling to [0, 1] from [-1, 1]
+            synthetic_samples = torch.clamp(
+                synthetic_samples * 0.5 + 0.5, min=0.0, max=1.0
+            )
+            synthetic_samples = torch.floor(synthetic_samples * 255)
 
             synthetic_samples = synthetic_samples.to(torch.float32) / 255.0
             if num_synthetic + synthetic_samples.shape[0] > fid_samples:

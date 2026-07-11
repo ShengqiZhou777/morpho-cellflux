@@ -142,27 +142,10 @@ def get_args_parser():
         help="ODE solver options. dopri5 uses atol/rtol; midpoint uses step_size.",
     )
     parser.add_argument(
-        "--sym",
-        default=0.0,
-        type=float,
-        help="Symmetric term for sampling the discrete flow.",
-    )
-    parser.add_argument(
         "--temp",
         default=1.0,
         type=float,
         help="Temperature for sampling the discrete flow.",
-    )
-    parser.add_argument(
-        "--sym_func",
-        action="store_true",
-        help="Use a fixed function for the symmetric term in the discrete flow.",
-    )
-    parser.add_argument(
-        "--sampling_dtype",
-        default="float32",
-        choices=["float32", "float64"],
-        help="Solver dtype for sampling the discrete flow.",
     )
     parser.add_argument(
         "--cfg_scale",
@@ -252,17 +235,6 @@ def get_args_parser():
         help="Only run one batch of training and evaluation.",
     )
     parser.add_argument(
-        "--discrete_flow_matching",
-        action="store_true",
-        help="Train discrete flow matching model.",
-    )
-    parser.add_argument(
-        "--discrete_fm_steps",
-        default=1024,
-        type=int,
-        help="Number of sampling steps for discrete FM.",
-    )
-    parser.add_argument(
         "--config",
         default="bbbc021_all",
         type=str,
@@ -276,9 +248,9 @@ def get_args_parser():
     )
     parser.add_argument(
         "--use_initial",
-        default=0,
+        default=1,
         type=int,
-        help="Use the initial state as input to the ODE (0 no use, 1 use, 2 use w/ noise).",
+        help="Start the ODE from the control image (1 = control init, the only supported mode).",
     )
     parser.add_argument(
         "--interpolate",
@@ -289,63 +261,6 @@ def get_args_parser():
         "--iter_ctrl",
         action="store_true",
         help="Iterate over control samples or target image",
-    )
-    parser.add_argument(
-        "--noise_level",
-        type=float,
-        default=0.2,
-        help="Noise level for the control image.",
-    )
-    parser.add_argument(
-        "--noise_prob",
-        type=float,
-        default=0.5,
-    )
-    parser.add_argument(
-        "--center_noise_sigma",
-        type=float,
-        default=0.0,
-        help="Standard deviation for center-weighted Gaussian noise envelope "
-             "(in normalized [-1,1] image coordinates). 0 = uniform noise (default). "
-             ">0 enables centered noise for use_initial=0 mode to bias generation "
-             "toward a single centered cell. Suggested: 0.3–0.5.",
-    )
-    parser.add_argument(
-        "--foreground_loss",
-        action="store_true",
-        help="Use foreground-weighted flow-matching MSE for sparse marker crops.",
-    )
-    parser.add_argument(
-        "--foreground_threshold",
-        type=float,
-        default=0.05,
-        help="Raw [0,1] marker-intensity threshold for dynamic foreground masks.",
-    )
-    parser.add_argument(
-        "--foreground_weight",
-        type=float,
-        default=5.0,
-        help="Loss weight for foreground pixels when --foreground_loss is enabled.",
-    )
-    parser.add_argument(
-        "--background_weight",
-        type=float,
-        default=0.1,
-        help="Loss weight for background pixels when --foreground_loss is enabled.",
-    )
-
-    parser.add_argument(
-        "--morph_loss_weight",
-        type=float,
-        default=0.0,
-        help="Weight for image-feature reconstruction loss on predicted target (0=disabled).",
-    )
-
-    parser.add_argument(
-        "--gan_weight",
-        type=float,
-        default=0.0,
-        help="Weight for GAN adversarial loss (PatchGAN discriminator). 0=disabled.",
     )
 
     # --- Pairing strategy (ADR-002 data-quality improvement) ---

@@ -39,7 +39,6 @@ def _load_args(config_name: str) -> SimpleNamespace:
         {
             "config": config_name,
             "device": "cuda" if torch.cuda.is_available() else "cpu",
-            "discrete_flow_matching": False,
             "use_ema": False,
         }
     )
@@ -68,7 +67,6 @@ def _to_numpy_image(x: torch.Tensor) -> np.ndarray:
 def _load_model(args: SimpleNamespace, checkpoint: Path, device: torch.device) -> torch.nn.Module:
     model = instantiate_model(
         architechture=args.dataset,
-        is_discrete=False,
         use_ema=False,
         overrides=vars(args),
     )

@@ -40,7 +40,6 @@ def main() -> int:
             "global_rank": 0,
             "device": "cpu",
             "test_run": True,
-            "discrete_flow_matching": False,
             "use_ema": False,
         }
     )
@@ -59,7 +58,6 @@ def main() -> int:
 
     model = instantiate_model(
         architechture=args.dataset,
-        is_discrete=False,
         use_ema=False,
         overrides=vars(args),
     )
