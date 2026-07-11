@@ -13,7 +13,7 @@ if [[ -z "$TORCHRUN" ]]; then
   exit 127
 fi
 
-OUT=${OUT:-$PROJECT_DIR/outputs/runs/microalgae/timepoint_v1}
+OUT=${OUT:-$PROJECT_DIR/outputs/runs/microalgae/timepoint_512_62d_v1}
 BATCH=${BATCH:-16}          # per-GPU batch size. 16 uses about 25GB and is safe through FID eval on a 32GB card.
 ACCUM=${ACCUM:-1}           # gradient accumulation. Effective batch = BATCH * ACCUM * NPROC, no extra memory.
 EPOCHS=${EPOCHS:-40}
@@ -24,7 +24,7 @@ USE_INITIAL=${USE_INITIAL:-1}   # 0 = noise to target, 1 = control init, 2 = con
 NOISE_LEVEL=${NOISE_LEVEL:-0.2} # noise added to the control image when USE_INITIAL=2.
 NOISE_PROB=${NOISE_PROB:-0.5}   # probability of adding noise when USE_INITIAL=2.
 CFG=${CFG:-0.2}                 # classifier-free guidance scale at sampling.
-CONFIG=${CONFIG:-microalgae_timepoint}        # config name under configs/, selects the data index and embedding.
+CONFIG=${CONFIG:-microalgae_timepoint_512_62d}   # config name under configs/, selects the data index and embedding.
 DATASET=${DATASET:-phenoflux}                 # dataset name passed to --dataset.
 WANDB_PROJECT="${WANDB_PROJECT:-phenoflux}"
 WANDB_RUN_NAME="${WANDB_RUN_NAME:-microalgae_$(basename "$OUT")}"

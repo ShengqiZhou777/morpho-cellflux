@@ -34,10 +34,12 @@
 
 ## 5. configs/ 收敛
 
-- [ ] 5.1 判定活跃 config 集（至少 `microalgae_timepoint_512_62d` + `microalgae_smoke`；field lane 去留见 design Open Questions）
-- [ ] 5.2 归档/删除冗余 config（`microalgae_timepoint`、`_512`、`_quick` 等重叠项）
-- [ ] 5.3 更新 `configs/README.md`：每个保留 config 标注 active/archived + 用途
-- [ ] 5.4 verify：`configs/` 每个文件在 README 中有条目
+- [x] 5.1 判定活跃 config 集：Primary=`microalgae_timepoint_512_62d`、Baseline=`microalgae_timepoint_512`、Field、Smoke、Validation（决策：62d 为主路径）
+- [x] 5.2 归档冗余 config：`microalgae_timepoint`(128px)、`microalgae_timepoint_quick` → `archive/legacy_configs_2026_07/`
+- [x] 5.3 更新 `configs/README.md`：5 个活跃 config 按 Primary/Baseline/Field/Smoke/Validation 分类标注
+- [x] 5.4 更新入口默认为 62d：`train.sh` 默认 CONFIG、`quick_validate.sh` 门禁改为接受 512/512_62d（去掉过时的"Only microalgae_timepoint"）
+- [x] 5.5 重写失效的 `Makefile`：原引用已删的 CRISPR/Diet 脚本（materialize_data/build_diet/interpolate.sh），改为 microalgae 目标（data/interpolate/smoke/quick/train）
+- [x] 5.6 verify：`bash -n` 两个入口脚本通过；`make` 5 目标有效；`smoke_validate.py` 通过
 
 ## 6. 收尾验证
 
