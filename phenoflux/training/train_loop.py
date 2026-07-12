@@ -57,6 +57,30 @@ def skewed_timestep_sample(num_samples: int, device: torch.device) -> torch.Tens
     return torch.clip(time, min=0.0001, max=1.0)
 
 
+def _mmd_rbf(x: torch.Tensor, y: torch.Tensor, sigma: float | None = None) -> torch.Tensor:
+    """Maximum Mean Discrepancy with Gaussian RBF kernel (scDFM-style, Yu et al. 2026).
+
+    Compares two minibatches at the distribution level — unlike per-sample MSE this
+    penalises variance collapse. The kernel bandwidth defaults to the median
+    pairwise distance (median heuristic, Gretton et al. 2012)."""
+    xx = torch.cdist(x, x, p=2) ** 2
+    yy = torch.cdist(y, y, p=2) ** 2
+    xy = torch.cdist(x, y, p=2) ** 2
+    if sigma is None:
+        # median heuristic on the joint set
+        with torch.no_grad():
+            d = torch.cat([x, y], dim=0)
+            pd = torch.cdist(d, d, p=2) ** 2
+            sigma2 = pd.median()
+    else:
+        sigma2 = sigma ** 2
+    gamma = 1.0 / (2.0 * sigma2 + 1e-8)
+    k_xx = torch.exp(-gamma * xx).mean()
+    k_yy = torch.exp(-gamma * yy).mean()
+    k_xy = torch.exp(-gamma * xy).mean()
+    return k_xx + k_yy - 2.0 * k_xy
+
+
 def my_train_one_epoch(
     model: torch.nn.Module,
     data_loader: Iterable,
@@ -144,6 +168,20 @@ def my_train_one_epoch(
                 fake_out_g = _DISCRIMINATOR(x_pred_target)
                 g_loss = -fake_out_g.mean()
             loss = loss + gan_weight * g_loss
+
+        # --- MMD distribution-matching loss (scDFM, Yu et al. 2026) ---
+        mmd_weight = getattr(args, 'mmd_weight', 0.0)
+        if mmd_weight > 0 and use_initial == 0:
+            # Compare generated batch vs real target at the distribution level.
+            # x_pred_target was computed above; downsample to 16×16 for efficiency.
+            x_pred_target = x_t + (1.0 - t.view(-1, 1, 1, 1)) * pred
+            gen_ds = torch.nn.functional.interpolate(
+                x_pred_target.detach(), size=(16, 16), mode='bilinear', align_corners=False
+            ).flatten(1)
+            real_ds = torch.nn.functional.interpolate(
+                x_real_trt, size=(16, 16), mode='bilinear', align_corners=False
+            ).flatten(1)
+            loss = loss + mmd_weight * _mmd_rbf(gen_ds, real_ds)
 
         loss_value = loss.item()
         batch_loss.update(loss)

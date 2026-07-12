@@ -287,6 +287,13 @@ def get_args_parser():
         default=0.0,
         help="Weight for the PatchGAN adversarial loss (0 = disabled).",
     )
+    parser.add_argument(
+        "--mmd_weight",
+        type=float,
+        default=0.0,
+        help="Weight for MMD distribution-matching loss (0 = disabled). "
+             "Applies only with noise-start (use_initial=0). scDFM 2026.",
+    )
 
     # --- Pairing strategy (ADR-002 data-quality improvement) ---
     parser.add_argument(

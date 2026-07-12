@@ -25,6 +25,7 @@ NOISE_LEVEL=${NOISE_LEVEL:-0.2}              # stddev of noise added to control 
 NOISE_PROB=${NOISE_PROB:-0.5}                # probability of adding noise when USE_INITIAL=2.
 CENTER_NOISE_SIGMA=${CENTER_NOISE_SIGMA:-0.0}  # center-weighted noise envelope for USE_INITIAL=0 (>0 = one centered cell).
 GAN_WEIGHT=${GAN_WEIGHT:-0.0}                # PatchGAN adversarial loss weight (0 = off).
+MMD_WEIGHT=${MMD_WEIGHT:-0.0}                # MMD distribution-matching loss weight (0 = off). scDFM 2026.
 CFG=${CFG:-0.2}                 # classifier-free guidance scale at sampling.
 CONFIG=${CONFIG:-microalgae_timepoint_512_genes}   # config name under configs/, selects the data index and embedding.
 DATASET=${DATASET:-phenoflux}                 # dataset name passed to --dataset.
@@ -47,7 +48,7 @@ PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \
   --dataset "$DATASET" --config "$CONFIG" --device cuda \
   --batch_size "$BATCH" --accum_iter "$ACCUM" --num_workers 10 --epochs "$EPOCHS" \
   --use_initial "$USE_INITIAL" --noise_level "$NOISE_LEVEL" --noise_prob "$NOISE_PROB" \
-  --center_noise_sigma "$CENTER_NOISE_SIGMA" --gan_weight "$GAN_WEIGHT" --use_ema --skewed_timesteps \
+  --center_noise_sigma "$CENTER_NOISE_SIGMA" --gan_weight "$GAN_WEIGHT" --mmd_weight "$MMD_WEIGHT" --use_ema --skewed_timesteps \
   --class_drop_prob 0.2 --cfg_scale "$CFG" \
   --eval_frequency "$EVAL_FREQ" --compute_fid --fid_samples "$FID_SAMPLES" \
   --ode_options "$ODE_OPTIONS" --save_fid_samples \
