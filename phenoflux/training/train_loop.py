@@ -48,7 +48,7 @@ class PatchDiscriminator(nn.Module):
 
 def skewed_timestep_sample(num_samples: int, device: torch.device) -> torch.Tensor:
     """EDM-style log-normal time sampling (P_mean=-1.2, P_std=1.2)."""
-    P_mean = -1.2
+    P_mean = -0.5
     P_std = 1.2
     rnd_normal = torch.randn((num_samples,), device=device)
     sigma_random = (rnd_normal * P_std).exp().detach()
