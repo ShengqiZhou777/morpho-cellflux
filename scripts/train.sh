@@ -32,6 +32,7 @@ WANDB_PROJECT="${WANDB_PROJECT:-phenoflux}"
 WANDB_RUN_NAME="${WANDB_RUN_NAME:-microalgae_$(basename "$OUT")}"
 ODE_OPTIONS=${ODE_OPTIONS:-'{"step_size": 0.02}'}
 EARLY_STOP=${EARLY_STOP:-5}   # stop if loss doesn't improve for N epochs. 0 = disabled.
+RESUME=${RESUME:-}            # path to a checkpoint-N.pth to resume from (auto-sets start_epoch = N+1). empty = fresh.
 TEST_RUN=${TEST_RUN:-0}
 
 EXTRA_ARGS=()
@@ -51,5 +52,6 @@ PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \
   --eval_frequency "$EVAL_FREQ" --compute_fid --fid_samples "$FID_SAMPLES" \
   --ode_options "$ODE_OPTIONS" --save_fid_samples \
   --early_stop_patience "$EARLY_STOP" \
+  --resume "$RESUME" \
   --wandb_project "$WANDB_PROJECT" --wandb_run_name "$WANDB_RUN_NAME" \
   --output_dir "$OUT" "${EXTRA_ARGS[@]}" 2>&1 | tee -a "$OUT/train_stdout.log"
