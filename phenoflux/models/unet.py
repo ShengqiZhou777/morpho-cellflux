@@ -88,10 +88,10 @@ class TimestepEmbedSequential(nn.Sequential, TimestepBlock):
     support it as an extra input.
     """
 
-    def forward(self, x, emb):
+    def forward(self, x, emb, cond_emb=None):
         for layer in self:
             if isinstance(layer, TimestepBlock):
-                x = layer(x, emb)
+                x = layer(x, emb, cond_emb=cond_emb)
             else:
                 x = layer(x)
         return x
@@ -247,13 +247,17 @@ class ResBlock(TimestepBlock):
         else:
             self.skip_connection = conv_nd(dims, channels, self.out_channels, 1)
 
-    def forward(self, x, emb):
+    def forward(self, x, emb, cond_emb=None):
         """
         Apply the block to a Tensor, conditioned on a timestep embedding.
         :param x: an [N x C x ...] Tensor of features.
         :param emb: an [N x emb_channels] Tensor of timestep embeddings.
+        :param cond_emb: optional [N x emb_channels] condition embedding (CellFlow-style
+                         per-block injection; combined with emb at block level).
         :return: an [N x C x ...] Tensor of outputs.
         """
+        if cond_emb is not None:
+            emb = emb + cond_emb
         return checkpoint(
             self._forward,
             (x, emb),
@@ -701,20 +705,20 @@ class UNetModel(nn.Module):
 
         h = x
 
-        # Add condition embedding to time embedding
+        # Condition embedding: per-block injection (CellFlow-style) instead of
+        # single-point addition at the top. The condition is re-combined with
+        # the time embedding at every ResBlock, preventing dilution through deep layers.
         cond = extra.get("concat_conditioning", None)
-        if cond is not None:
-            mol_embedding = self.mol_embed_transform(cond)
-            emb = emb + mol_embedding
+        cond_emb = self.mol_embed_transform(cond) if cond is not None else None
 
         for module in self.input_blocks:
-            h = module(h, emb)
+            h = module(h, emb, cond_emb=cond_emb)
             hs.append(h)
-        h = self.middle_block(h, emb)
+        h = self.middle_block(h, emb, cond_emb=cond_emb)
 
         for module in self.output_blocks:
             h = torch.cat([h, hs.pop()], dim=1)
-            h = module(h, emb)
+            h = module(h, emb, cond_emb=cond_emb)
 
         h = h.type(x.dtype)
         result = self.out(h)
