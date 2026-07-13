@@ -120,7 +120,7 @@ def eval_model(
         datamodule.test_set,
         batch_size=eval_bs,
         shuffle=True,  # shuffle so fid_samples span all conditions, not just the first alphabetically
-        num_workers=args.num_workers,
+        num_workers=0,  # ODE sampling is the bottleneck (100+ NFE/batch), not I/O; zero workers avoids forked-process cleanup issues
         pin_memory=args.pin_mem,
         drop_last=False,
     )
