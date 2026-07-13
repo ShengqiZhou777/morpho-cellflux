@@ -108,20 +108,22 @@ def eval_model(
     _model = model.module if hasattr(model, 'module') else model
     _model = getattr(_model, 'model', _model)  # unwrap EMA if present
 
-    # Eval uses less GPU memory (no gradients/optimizer), so we can use a larger
-    # batch size than training to speed up FID image generation.
+    # Always use a shuffled DataLoader for eval so fid_samples span all
+    # conditions uniformly, not just the first alphabetically (csv row order).
+    # Previously this was gated behind eval_batch_size != train_batch_size,
+    # but with eval_batch_size=0 defaulting to train_bs, the gate never opened.
     train_bs = getattr(args, 'batch_size', 32)
     eval_bs = getattr(args, 'eval_batch_size', 0) or train_bs
     if eval_bs != train_bs:
         logger.info(f"Eval batch_size: {eval_bs} (train was {train_bs})")
-        data_loader = torch.utils.data.DataLoader(
-            datamodule.test_set,
-            batch_size=eval_bs,
-            shuffle=True,  # shuffle so fid_samples span all conditions, not just the first alphabetically
-            num_workers=args.num_workers,
-            pin_memory=args.pin_mem,
-            drop_last=False,
-        )
+    data_loader = torch.utils.data.DataLoader(
+        datamodule.test_set,
+        batch_size=eval_bs,
+        shuffle=True,  # shuffle so fid_samples span all conditions, not just the first alphabetically
+        num_workers=args.num_workers,
+        pin_memory=args.pin_mem,
+        drop_last=False,
+    )
 
     cfg_scaled_model = CFGScaledModel(model=model)
     cfg_scaled_model.train(False)

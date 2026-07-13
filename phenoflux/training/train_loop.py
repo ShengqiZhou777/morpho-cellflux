@@ -176,7 +176,7 @@ def my_train_one_epoch(
             # x_pred_target was computed above; downsample to 16×16 for efficiency.
             x_pred_target = x_t + (1.0 - t.view(-1, 1, 1, 1)) * pred
             gen_ds = torch.nn.functional.interpolate(
-                x_pred_target.detach(), size=(16, 16), mode='bilinear', align_corners=False
+                x_pred_target, size=(16, 16), mode='bilinear', align_corners=False
             ).flatten(1)
             real_ds = torch.nn.functional.interpolate(
                 x_real_trt, size=(16, 16), mode='bilinear', align_corners=False
