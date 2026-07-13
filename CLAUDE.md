@@ -461,26 +461,71 @@ features to it. It just needs more training epochs to amplify the signal.
 
 ## Resuming Training
 
-To continue `genes_noise0_gan0.1_mmd0.5_film_e60` from epoch 14:
+### Currently Running (2026-07-13 08:52 CST)
+
+Training `genes_noise0_gan0.1_mmd0.5_film_e60` resumed from epoch 14, targeting epoch 60.
+
+**Exact command used** (train.sh wrapper was unreliable; launched directly):
 ```bash
 cd /home/shockley/myproject/PhenoFlux/morpho-cellflux
 
-TORCHRUN=$(command -v torchrun) \
-OUT=outputs/runs/microalgae/genes_noise0_gan0.1_mmd0.5_film_e60 \
-BATCH=12 ACCUM=1 EPOCHS=60 NPROC=2 USE_INITIAL=0 \
-CENTER_NOISE_SIGMA=0.4 GAN_WEIGHT=0.1 MMD_WEIGHT=0.5 CFG=0.2 \
-CONFIG=microalgae_timepoint_512_genes DATASET=phenoflux \
-EVAL_FREQ=10 FID_SAMPLES=512 EARLY_STOP=0 \
-RESUME=outputs/runs/microalgae/genes_noise0_gan0.1_mmd0.5_film_e60/checkpoint-14.pth \
-bash scripts/train.sh
+PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \
+/home/shockley/miniconda3/bin/torchrun --standalone --nproc_per_node=1 \
+  -m phenoflux.train \
+  --dataset phenoflux --config microalgae_timepoint_512_genes --device cuda \
+  --batch_size 12 --accum_iter 1 --num_workers 10 --epochs 60 \
+  --use_initial 0 --noise_level 0.2 --noise_prob 0.5 --center_noise_sigma 0.4 \
+  --gan_weight 0.1 --mmd_weight 0.5 --use_ema --skewed_timesteps \
+  --class_drop_prob 0.2 --cfg_scale 0.2 \
+  --eval_frequency 10 --compute_fid --fid_samples 512 \
+  --ode_options '{"step_size": 0.02}' --save_fid_samples \
+  --early_stop_patience 0 \
+  --resume outputs/runs/microalgae/genes_noise0_gan0.1_mmd0.5_film_e60/checkpoint-14.pth \
+  --output_dir outputs/runs/microalgae/genes_noise0_gan0.1_mmd0.5_film_e60
 ```
-~14h wall time for 46 epochs on 2x32GB with B=12. EVAL_FREQ=10 reduces eval overhead.
 
-After reaching epoch 30+, re-run condition-swap test:
+### Timing Estimates (1x RTX 4090, BATCH=12, NPROC=1)
+
+| Milestone | Epoch | ETA | Checkpoint file |
+|-----------|-------|-----|----------------|
+| Start | 15 | 2026-07-13 08:52 | -- |
+| Epoch 15 done | 15 | ~10:22 | checkpoint-15.pth |
+| Epoch 20 | 20 | ~18:00 | checkpoint-20.pth |
+| Epoch 30 | 30 | 2026-07-14 ~09:00 | checkpoint-30.pth |
+| Epoch 45 | 45 | 2026-07-14 ~08:00+1d | checkpoint-45.pth |
+| Epoch 60 (done) | 60 | 2026-07-15 ~07:00 | checkpoint-60.pth |
+
+Each epoch: ~1.5h (8,597 steps x ~0.6s/step). EVAL_FREQ=10: FID eval every 10 epochs.
+Total: 46 epochs x 1.5h = ~69h (~3 days) from epoch 14 to 60.
+
+### Monitoring
+
 ```bash
-# Edit /tmp/cond_vel_test3.py: change CKPT path to new checkpoint
+# Check if training is running
+nvidia-smi --query-gpu=utilization.gpu,memory.used --format=csv,noheader
+ps aux | grep "phenoflux.train" | grep -v grep | wc -l
+
+# Check latest checkpoint epoch
+python3 -c "
+import torch
+ck = torch.load('outputs/runs/microalgae/genes_noise0_gan0.1_mmd0.5_film_e60/checkpoint.pth', map_location='cpu', weights_only=False)
+print(f'Epoch: {ck.get(\"epoch\", \"?\")}')
+"
+```
+
+### After Reaching Epoch 30+
+
+Re-run condition-swap experiment on new checkpoint:
+```bash
+# Edit /tmp/cond_vel_test3.py: change CKPT path
+CKPT = REPO / 'outputs/runs/microalgae/genes_noise0_gan0.1_mmd0.5_film_e60/checkpoint-30.pth'
 python3 /tmp/cond_vel_test3.py
 ```
+
+Expected improvements at epoch 30+:
+- cross-condition |dv| ratio vs cond-vs-uncond: > 3.0 (epoch 14: 1.78)
+- cos_sim between extreme conditions: < 0.95 (epoch 14: 0.978)
+- Feature modulation ratios should increase across all features
 
 ## Key Memory Files (session context)
 
