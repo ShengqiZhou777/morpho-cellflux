@@ -429,7 +429,7 @@ passing to model, or drop time_bin_h (redundant with time_norm).
 |-----|--------|---------|---------------------|-------|
 | `genes_noise0_gan0.1_e40` | use_initial=1, no MMD, P_mean=-1.2 | -2.64 (FAIL) | 56.4/36.7 | Collapsed baseline |
 | `genes_noise0_gan0.1_mmd0.5_e60` | noise+GAN+MMD, old arch, P_mean=-1.2 | +1.22 (PASS) | N/A | Epoch 4 only |
-| `genes_noise0_gan0.1_mmd0.5_balancedt_e60` | noise+GAN+MMD, old arch, P_mean=-0.5 | +1.08 (PASS) | N/A | Epoch 4+9, FID eval pending |
+| `genes_noise0_gan0.1_mmd0.5_balancedt_e60` | noise+GAN+MMD, old arch, P_mean=-0.5 | +1.29 (PASS) | 66.37/55.26 | Epochs 4+9. Epoch 9 = FiLM epoch 9 identically (FiLM zero at ep9). |
 | `genes_noise0_gan0.1_mmd0.5_film_e60` | noise+GAN+MMD, FiLM, P_mean=-0.5 | +1.29 (PASS) | 66.4/55.3 | Epoch 14 (killed). Condition-swap tested: condition IS used. |
 | `genes_noise0_gan0.1_e60` | CFG=1.0 misconfiguration | -- | -- | Stopped early |
 
